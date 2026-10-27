@@ -12,13 +12,20 @@
 
 ## 模板清单
 
-### `ielts.reading.explain` · 1.1.0
+### `ielts.reading.explain` · 2.0.0
 
-- 用途：解释一道阅读题。
-- 变量：`passage`、`question`、`answerKey`、`userAnswer`、`questionType`、`instruction`、`ruleErrors`、`strictness`。
-- 输出：`locationQuote`、`locationHint`、`synonymPairs[]`、`whyKeyCorrect`、`whyUserWrong`、`cause`、`causeBasis`。
-- 关键约束：判断题要讲清 FALSE 与 NOT GIVEN 的界限；定位失败必须明确不可靠。
-- 版本历史：`1.0.0` 的固定样例不要求 `causeBasis`；`1.1.0` 起要求明确区分类/规则判定与模型建议。两版均由离线版本检查脚本验证。
+- 用途：站在用户做题时的视角讲一道阅读题。
+- 变量：`passage`（可为空）、`question`、`answerKey`、`userAnswer`、`questionType`、`instruction`、`ruleErrors`、`strictness`、`situation`（用户点的处境标签 + 自述）、`method`（当前做题方法的简述）。
+- 输出：`stemReading`（题干在问什么）、`locateRoute`（原文在哪、怎么找过去）、`locationQuote`、`locationHint`、`sentenceBreakdown[]`（词块 + 中文）、`synonymPairs[]`（`question`、`passage`、`mechanism`、`evidence`、`note`）、`whyKeyCorrect`、`whyUserWrong`、`fromYourView`（结合处境：你为什么会那样答）、`uncertainty`、`vocab[]`（`en`、`zh`、`priority`）、`methodTip`、`askUser`、`cause`、`causeBasis`。
+- 关键约束：
+  - 先题干、再定位路径、再拆句、最后从用户处境解释；
+  - 证据不足写进 `uncertainty`，相应替换标“证据不完整”，不许为了圆答案册硬造推理；
+  - 同义替换必须保留原句的信息关系和限定，话题相近不等于每个限定都成立；
+  - 没有原文时 `locationQuote` 留空、`sentenceBreakdown` 为空，并说明无法校验；
+  - `methodTip` 用用户方法里的步骤名说下次怎么做；
+  - 判断题讲清 FALSE 与 NOT GIVEN 的界限。
+- 替换机制（固定词表）：词义替换、短语替换、词性转换、整句逻辑改写、具体→抽象、抽象→具体、否定/反义改写、原词复现。证据强度：直接对应、需逻辑推导、证据不完整。
+- 版本历史：`1.0.0` 不要求 `causeBasis`；`1.1.0` 区分规则判定与模型建议；`2.0.0` 加入用户视角、机制与证据强度、难词和多轮追问用的 `askUser`。三版的固定样例都由离线版本检查脚本验证。
 
 ### `ielts.listening.explain` · 1.0.0
 
@@ -34,12 +41,13 @@
 - 输出：`overview`、`causeShares[]`、`exposedProblems[]`、`nextActions[]`（最多 2 条）。
 - 关键约束：不得虚构题号或错因；不写空泛鼓励。
 
-### `ielts.reading.followup` · 1.0.0
+### `ielts.reading.followup` · 2.0.0
 
-- 用途：同一道阅读题的继续追问。
-- 变量：`passage`、`question`、`answerKey`、`userAnswer`、`history`、`followup`。
-- 输出：`answer`、`evidenceQuotes[]`、`uncertain`。
-- 关键约束：证据不足必须 `uncertain=true`。
+- 用途：就一道阅读题和用户多轮对话。
+- 变量：`passage`、`question`、`answerKey`、`userAnswer`、`history`（已有讲解）、`situation`、`messages[]`（之前的对话，最多带最近 8 轮）、`followup`。
+- 输出：`answer`、`evidenceQuotes[]`、`uncertain`、`askUser`。
+- 关键约束：证据不足必须 `uncertain=true`；接着对话往下讲，不重复；用户说的是当时的想法时，先回应这个想法对在哪、偏在哪。
+- 版本历史：`1.0.0` 是单轮追问。
 
 ### `ielts.writing.feedback` · 1.0.0
 

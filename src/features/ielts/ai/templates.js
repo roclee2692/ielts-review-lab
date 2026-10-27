@@ -1,16 +1,10 @@
 // Central model-template registry. Every browser/provider/proxy call must use
 // one of these ids. The harness exporter imports this same object.
 
-const READING_CAUSES = [
-  '定位失败', '同义替换没识别', '过度推断（用了原文没有的信息）',
-  '判断题规则混淆（FALSE 与 NOT GIVEN）', '题型理解错误', '拼写或格式',
-  '单复数', '超字数', '时间不够没做',
-]
+import { EVIDENCE_STATUS, LISTENING_CAUSES as LISTENING_CAUSE_LIST, READING_CAUSES as READING_CAUSE_LIST, SYNONYM_MECHANISMS } from '../data/causes.js'
 
-const LISTENING_CAUSES = [
-  '拼写或格式', '单复数', '超字数', '漏听', '同义改述没识别',
-  '被干扰或改口误导', '数字时间日期', '连读弱读（推断）', '词汇不认识', '时间不够没做',
-]
+const READING_CAUSES = [...READING_CAUSE_LIST]
+const LISTENING_CAUSES = [...LISTENING_CAUSE_LIST]
 
 const SOURCE_RULES = [
   '只依据用户提供的原文/听力文稿与答案册。',
@@ -71,6 +65,52 @@ const readingExplanationSchemaV1 = {
   required: readingExplanationSchema.required.filter(field => field !== 'causeBasis'),
   properties: Object.fromEntries(Object.entries(readingExplanationSchema.properties).filter(([field]) => field !== 'causeBasis')),
 }
+
+// v1.1.0: kept for history/regression only.
+const readingExplanationSchemaV11 = readingExplanationSchema
+
+const readingExplanationSchemaV2 = responseSchema({
+  stemReading: stringSchema(600),
+  locateRoute: stringSchema(800),
+  locationQuote: stringSchema(1600),
+  locationHint: stringSchema(300),
+  sentenceBreakdown: {
+    type: 'array', maxItems: 10,
+    items: responseSchema({ chunk: stringSchema(240), meaning: stringSchema(240) }),
+  },
+  synonymPairs: {
+    type: 'array', maxItems: 8,
+    items: responseSchema({
+      question: stringSchema(200),
+      passage: stringSchema(300),
+      mechanism: { type: 'string', enum: [...SYNONYM_MECHANISMS] },
+      evidence: { type: 'string', enum: [...EVIDENCE_STATUS] },
+      note: stringSchema(300),
+    }),
+  },
+  whyKeyCorrect: stringSchema(),
+  whyUserWrong: stringSchema(),
+  fromYourView: stringSchema(1000),
+  uncertainty: stringSchema(600),
+  vocab: {
+    type: 'array', maxItems: 10,
+    items: responseSchema({ en: stringSchema(80), zh: stringSchema(80), priority: { type: 'string', enum: ['高价值', '认识即可'] } }),
+  },
+  methodTip: stringSchema(400),
+  askUser: stringSchema(300),
+  cause: { type: 'string', enum: READING_CAUSES },
+  causeBasis: { type: 'string', enum: ['rule', 'model'] },
+})
+
+const READING_PERSPECTIVE_RULES = [
+  '站在用户做这道题时的视角讲：先说题干在问什么，再说原文在哪、怎么从定位词找过去，再拆原文句子，最后结合用户自述的处境说他为什么会那样答。',
+  '证据不足时在 uncertainty 里直说，并把相应替换的 evidence 标为“证据不完整”；不要为了圆答案册硬造推理。',
+  '同义替换必须保留原句的信息关系和限定；话题相近不等于题干的每个限定都成立。',
+  '没有原文时 locationQuote 留空、sentenceBreakdown 为空数组，并在 uncertainty 说明讲解无法逐字校验。',
+  'vocab 只收高价值、可复用的词块；低频专业词标“认识即可”。',
+  '用户给了做题方法时，methodTip 用他的方法的步骤名来说下次在哪一步怎么做；没给方法就给一条通用做法。',
+  '需要用户补充信息才能讲准时，在 askUser 里问一个具体问题；不需要就留空。',
+]
 
 const listeningExplanationSchema = responseSchema({
   locationQuote: stringSchema(1600),
@@ -144,18 +184,20 @@ function baseMessages(system, user) {
 export const TEMPLATES = {
   'ielts.reading.explain': {
     id: 'ielts.reading.explain',
-    version: '1.1.0',
-    purpose: '依据用户原文与答案册讲解一道阅读题，并给出可核对证据。',
-    variables: ['passage', 'question', 'answerKey', 'userAnswer', 'questionType', 'instruction', 'ruleErrors', 'strictness'],
-    outputSchema: readingExplanationSchema,
+    version: '2.0.0',
+    purpose: '站在用户做题时的视角讲一道阅读题：题干理解、原文在哪怎么找、句子拆解、同义替换机制与证据强度、用户为什么会错、难词，并给出可核对证据。',
+    variables: ['passage', 'question', 'answerKey', 'userAnswer', 'questionType', 'instruction', 'ruleErrors', 'strictness', 'situation', 'method'],
+    outputSchema: readingExplanationSchemaV2,
     versionHistory: [
       { version: '1.0.0', outputSchema: readingExplanationSchemaV1, constraints: SOURCE_RULES },
+      { version: '1.1.0', outputSchema: readingExplanationSchemaV11, constraints: [...SOURCE_RULES, '判断题必须说明 FALSE 与 NOT GIVEN 的差别落在哪里。'] },
     ],
-    constraints: [...SOURCE_RULES, '判断题必须说明 FALSE 与 NOT GIVEN 的差别落在哪里。'],
+    constraints: [...SOURCE_RULES, ...READING_PERSPECTIVE_RULES, '判断题必须说明 FALSE 与 NOT GIVEN 的差别落在哪里。'],
     buildMessages(vars) {
+      const passage = String(vars.passage || '').trim()
       return baseMessages(
-        `你是雅思阅读复盘教练。${SOURCE_RULES.join(' ')} 反馈严格度：${vars.strictness || 'standard'}。只输出 JSON。`,
-        `【原文】\n${vars.passage}\n\n【题目】${vars.question}\n题型：${vars.questionType}\n字数要求：${vars.instruction || '未提供'}\n【答案册】${vars.answerKey}\n【用户答案】${vars.userAnswer}\n规则判定的错误：${(vars.ruleErrors || []).join(', ') || '无'}\n\n请输出：locationQuote, locationHint, synonymPairs, whyKeyCorrect, whyUserWrong, cause, causeBasis。`,
+        `你是雅思阅读复盘教练，像坐在用户旁边一起看这道题。${SOURCE_RULES.join(' ')} ${READING_PERSPECTIVE_RULES.join(' ')} 反馈严格度：${vars.strictness || 'standard'}。只输出 JSON。`,
+        `【原文】\n${passage || '（用户没有提供原文。不要编造引用。）'}\n\n【题目】${vars.question || '（用户没有提供题干）'}\n题型：${vars.questionType}\n字数要求：${vars.instruction || '未提供'}\n【答案册】${vars.answerKey}\n【用户答案】${vars.userAnswer}\n规则判定的错误：${(vars.ruleErrors || []).join(', ') || '无'}\n【用户做题时的处境】${vars.situation || '用户没有说明'}\n【用户的做题方法】\n${vars.method || '未提供'}\n\n请输出：stemReading, locateRoute, locationQuote, locationHint, sentenceBreakdown, synonymPairs(question, passage, mechanism, evidence, note), whyKeyCorrect, whyUserWrong, fromYourView, uncertainty, vocab(en, zh, priority), methodTip, askUser, cause, causeBasis。`,
       )
     },
   },
@@ -197,19 +239,33 @@ export const TEMPLATES = {
   },
   'ielts.reading.followup': {
     id: 'ielts.reading.followup',
-    version: '1.0.0',
-    purpose: '回答用户针对单道阅读题的追问。',
-    variables: ['passage', 'question', 'answerKey', 'userAnswer', 'history', 'followup'],
+    version: '2.0.0',
+    purpose: '就一道阅读题和用户多轮对话：接着他的问题和他做题时的想法讲，仍只依据原文。',
+    variables: ['passage', 'question', 'answerKey', 'userAnswer', 'history', 'situation', 'messages', 'followup'],
     outputSchema: responseSchema({
       answer: stringSchema(1500),
       evidenceQuotes: stringArraySchema(5, 1000),
       uncertain: { type: 'boolean' },
+      askUser: stringSchema(300),
     }),
-    constraints: [...SOURCE_RULES, '证据不足时把 uncertain 设为 true，并明确说明不能从原文确认。'],
+    versionHistory: [
+      {
+        version: '1.0.0',
+        outputSchema: responseSchema({ answer: stringSchema(1500), evidenceQuotes: stringArraySchema(5, 1000), uncertain: { type: 'boolean' } }),
+        constraints: [...SOURCE_RULES, '证据不足时把 uncertain 设为 true，并明确说明不能从原文确认。'],
+      },
+    ],
+    constraints: [
+      ...SOURCE_RULES,
+      '证据不足时把 uncertain 设为 true，并明确说明不能从原文确认。',
+      '接着对话往下讲，不重复已经讲过的内容；用户说的是他当时的想法时，先回应这个想法对在哪、偏在哪。',
+    ],
     buildMessages(vars) {
+      const turns = (Array.isArray(vars.messages) ? vars.messages : []).slice(-8)
+        .map(turn => `${turn.role === 'user' ? '用户' : '教练'}：${turn.text}`).join('\n')
       return baseMessages(
-        `你是雅思阅读问答助手。${SOURCE_RULES.join(' ')} 只输出 JSON。`,
-        `【原文】\n${vars.passage}\n【题目】${vars.question}\n【答案册】${vars.answerKey}\n【用户答案】${vars.userAnswer}\n【已有讲解】\n${json(vars.history)}\n【追问】${vars.followup}\n\n输出 answer, evidenceQuotes, uncertain。`,
+        `你是雅思阅读复盘教练，正在和用户就一道题来回讨论。${SOURCE_RULES.join(' ')} 只输出 JSON。`,
+        `【原文】\n${vars.passage || '（用户没有提供原文。不要编造引用。）'}\n【题目】${vars.question}\n【答案册】${vars.answerKey}\n【用户答案】${vars.userAnswer}\n【用户做题时的处境】${vars.situation || '未说明'}\n【已有讲解】\n${json(vars.history)}\n【之前的对话】\n${turns || '（无）'}\n【用户这次说】${vars.followup}\n\n输出 answer, evidenceQuotes, uncertain, askUser。`,
       )
     },
   },

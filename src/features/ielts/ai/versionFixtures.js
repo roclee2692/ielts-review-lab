@@ -23,6 +23,23 @@ export const TEMPLATE_VERSION_FIXTURES = Object.freeze({
       cause: '同义替换没识别',
       causeBasis: 'model',
     }),
+    '2.0.0': Object.freeze({
+      stemReading: 'The statement says the cabinet is in another building.',
+      locateRoute: 'Start from "reading room"; it appears in the second sentence of the paragraph.',
+      locationQuote: QUOTE,
+      locationHint: 'Paragraph 1, second sentence',
+      sentenceBreakdown: [{ chunk: 'sits beside the reading room', meaning: '就在阅览室旁边' }],
+      synonymPairs: [{ question: 'next to', passage: 'beside the reading room', mechanism: '词义替换', evidence: '直接对应', note: '' }],
+      whyKeyCorrect: 'The answer key follows the quoted sentence.',
+      whyUserWrong: 'The user answer conflicts with the quoted sentence.',
+      fromYourView: 'You read "beside" as unrelated to location.',
+      uncertainty: '',
+      vocab: [{ en: 'sit beside', zh: '位于……旁边', priority: '高价值' }],
+      methodTip: '',
+      askUser: '',
+      cause: '同义替换没识别',
+      causeBasis: 'model',
+    }),
   }),
 })
 

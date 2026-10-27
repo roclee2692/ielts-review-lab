@@ -76,7 +76,7 @@ describe('judge → explain → cause', () => {
 
     const ok = callTool(store, 'submit_explanation', {
       review_id, number: 2, location_quote: 'The project was funded by local residents rather than by the city council.',
-      synonym_pairs: [{ question: 'paid for', passage: 'funded by' }],
+      synonym_pairs: [{ question: 'paid for', passage: 'funded by', mechanism: '短语替换', evidence: '直接对应' }],
       why_key_correct: '原文明确说不是市议会出资，与题干矛盾，所以是 FALSE。', why_user_wrong: '原文给了相反信息，不是没提到。',
       cause: '判断题规则混淆（FALSE 与 NOT GIVEN）', confidence: 'high',
     })
@@ -101,6 +101,62 @@ describe('judge → explain → cause', () => {
     callTool(store, 'judge_set', { review_id })
     expect(() => callTool(store, 'set_cause', { review_id, number: 1, cause: '定位失败' })).toThrow('是对的')
     expect(() => callTool(store, 'set_cause', { review_id, number: 2, cause: '运气不好' })).toThrow('不在错因表')
+  })
+})
+
+describe('lighter entry and honest explanations', () => {
+  test('answer sheet alone, no passage, key found on the web', () => {
+    const ingested = callTool(store, 'ingest_passage', {
+      module: 'reading', source: 'Sample Passage B', answer_sheet: '1 TRUE ✓\n2 FALSE NG\n3 museum | musium', key_origin: 'web',
+    })
+    const judged = callTool(store, 'judge_set', { review_id: ingested.data.review_id })
+    expect(judged.text).toContain('答案册来自网络')
+    expect(judged.text).toContain('没有原文')
+    expect(judged.data.correct).toBe(1)
+    expect(judged.data.results.find(result => result.number === 3).rule_errors).toEqual(['SPELLING'])
+    // without a passage: no quotes allowed, uncertainty required
+    const base = { review_id: ingested.data.review_id, number: 2, why_key_correct: 'x', why_user_wrong: 'y', cause: '判断题规则混淆（FALSE 与 NOT GIVEN）', confidence: 'low' }
+    expect(() => callTool(store, 'submit_explanation', { ...base, location_quote: 'anything' })).toThrow('引擎校验')
+    expect(() => callTool(store, 'submit_explanation', base)).toThrow('引擎校验')
+    expect(callTool(store, 'submit_explanation', { ...base, uncertainty: '没有原文，无法核对。' }).data.cause_basis).toBe('model')
+  })
+
+  test('an incomplete-evidence pair must come with an uncertainty note', () => {
+    const { data: { review_id } } = ingest()
+    callTool(store, 'judge_set', { review_id })
+    const base = {
+      review_id, number: 2, location_quote: 'funded by local residents rather than by the city council',
+      synonym_pairs: [{ question: 'the city council paid for', passage: 'rather than by the city council', mechanism: '否定/反义改写', evidence: '证据不完整' }],
+      why_key_correct: 'x', why_user_wrong: 'y', cause: '同义替换没识别', confidence: 'medium',
+    }
+    expect(() => callTool(store, 'submit_explanation', base)).toThrow('引擎校验')
+    expect(() => callTool(store, 'submit_explanation', { ...base, synonym_pairs: [{ ...base.synonym_pairs[0], mechanism: '随便' }], uncertainty: 'u' })).toThrow('引擎校验')
+    expect(callTool(store, 'submit_explanation', { ...base, uncertainty: '原文只说不是市议会出资，没说完全没有政府参与。' }).data.number).toBe(2)
+  })
+
+  test('report has the three tables', () => {
+    const { data: { review_id } } = ingest({ reflections: { 2: '首次经过答案句没认出' } })
+    callTool(store, 'judge_set', { review_id })
+    callTool(store, 'submit_explanation', {
+      review_id, number: 2, location_quote: 'funded by local residents',
+      synonym_pairs: [{ question: 'paid for', passage: 'funded by', mechanism: '短语替换', evidence: '直接对应' }],
+      vocab: [{ en: 'fund', zh: '资助', priority: '高价值' }],
+      why_key_correct: 'x', why_user_wrong: 'y', cause: '同义替换没识别', confidence: 'high',
+    })
+    const report = callTool(store, 'report', { review_id }).data.markdown
+    expect(report).toContain('## 错题表')
+    expect(report).toContain('| 2 | paid for | funded by | 短语替换 | 直接对应 |')
+    expect(report).toContain('| fund | 资助 | 高价值 |')
+    expect(report).toContain('首次经过答案句没认出')
+  })
+
+  test('method: built-in parallel reading by default, editable, recorded on reviews', () => {
+    expect(callTool(store, 'method', {}).text).toContain('平行阅读法')
+    callTool(store, 'method', { action: 'save', method: { id: 'mine', module: 'reading', title: '我的方法', steps: [{ title: '先看题', points: ['a'] }] } })
+    callTool(store, 'method', { action: 'use', method_id: 'mine' })
+    expect(callTool(store, 'method', {}).text).toContain('我的方法')
+    const { data: { review_id } } = ingest()
+    expect(store.getReview(review_id).methodId).toBe('mine')
   })
 })
 

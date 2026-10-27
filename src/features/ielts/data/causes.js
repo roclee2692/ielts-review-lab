@@ -43,6 +43,30 @@ export const LISTENING_QUICK_TAGS = Object.freeze([
   { id: 'misspelt', label: '拼错', reflection: '听对了但拼错了。', cause: '拼写或格式' },
 ])
 
+/**
+ * 阅读：你做这题时的处境。讲题前先点一下，模型就从你当时卡住的地方讲起，
+ * 而不是从“标准答案”倒推。也作为建议错因，可以改。
+ */
+export const READING_QUICK_TAGS = Object.freeze([
+  { id: 'no-locator', label: '没找到定位词', situation: '我没在原文里找到题干的定位词。', cause: '定位失败' },
+  { id: 'passed-unseen', label: '首次经过答案句没认出', situation: '读第一遍时经过了答案句，但当时没认出它就是答案。', cause: '同义替换没识别' },
+  { id: 'found-not-understood', label: '找到了但没读懂', situation: '我找到了大概位置，但没读懂那句话。', cause: '定位失败' },
+  { id: 'understood-not-matched', label: '读懂了但没对上题干', situation: '原文看懂了，但没意识到它和题干说的是一回事。', cause: '同义替换没识别' },
+  { id: 'false-vs-ng', label: 'FALSE / NG 犹豫', situation: '我在 FALSE 和 NOT GIVEN 之间犹豫。', cause: '判断题规则混淆（FALSE 与 NOT GIVEN）' },
+  { id: 'over-inferred', label: '自己脑补了', situation: '我用了原文没直接说的信息去推。', cause: '过度推断（用了原文没有的信息）' },
+  { id: 'misread-stem', label: '题干看错了', situation: '我把题干或题目要求看错了。', cause: '读题失误（看错题干或要求）' },
+  { id: 'reread', label: '反复回读找不到', situation: '我来回翻了好几遍原文都没找到。', cause: '定位失败' },
+  { id: 'guessed', label: '没时间蒙的', situation: '时间不够，这题是蒙的。', cause: '时间不够没做' },
+])
+
+/** 同义替换是怎么换的：决定以后练什么。 */
+export const SYNONYM_MECHANISMS = Object.freeze([
+  '词义替换', '短语替换', '词性转换', '整句逻辑改写', '具体→抽象', '抽象→具体', '否定/反义改写', '原词复现',
+])
+
+/** 这对替换的证据有多硬。讲题时不许把“证据不完整”说成“直接对应”。 */
+export const EVIDENCE_STATUS = Object.freeze(['直接对应', '需逻辑推导', '证据不完整'])
+
 export const CAUSE_TO_RULE = Object.freeze({
   WORD_LIMIT: '超字数',
   PLURAL: '单复数',

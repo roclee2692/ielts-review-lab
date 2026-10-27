@@ -26,6 +26,9 @@ export function IeltsProvider({ children }) {
   const [modelRequest, setModelRequest] = useState(null)
   const [modelError, setModelError] = useState('')
   const [modelBusy, setModelBusy] = useState(false)
+  // 多轮追问时每条都弹确认太打断。用户可以选“这次打开期间不再询问”：只存在内存里，刷新即恢复。
+  const [skipConfirm, setSkipConfirm] = useState('') // '' | 'real' | 'mock'
+  const [rememberChoice, setRememberChoice] = useState(false)
 
   const updateSettings = useCallback(patch => {
     const next = saveIeltsSettings(patch)
@@ -85,16 +88,40 @@ export function IeltsProvider({ children }) {
     return next
   }, [reviewSchedule])
 
+  const runReal = useCallback(async (templateId, variables) => {
+    const result = await invokeTemplate(templateId, variables, {
+      settings,
+      onAudit: event => appendModelAudit(event),
+    })
+    if (result.meta?.auditId) {
+      const verification = verifyTemplateEvidence(templateId, variables, result.data)
+      if (verification) updateAuditEvidence(result.meta.auditId, verification)
+    }
+    return result
+  }, [settings])
+
   const requestModel = useCallback((templateId, variables) => new Promise(resolve => {
     try {
       const preview = buildRequestPreview(templateId, variables, settings)
       setModelError('')
+      if (skipConfirm === 'mock' || (skipConfirm === 'real' && !settings.apiKey)) {
+        resolve(buildMockOutput(templateId, variables))
+        return
+      }
+      if (skipConfirm === 'real') {
+        runReal(templateId, variables).then(resolve, error => {
+          // A failure falls back to the dialog so the learner sees the error and can retry.
+          setModelError(error.message)
+          setModelRequest({ preview, variables, resolve })
+        })
+        return
+      }
       setModelRequest({ preview, variables, resolve })
     } catch (error) {
       setModelError(error.message)
       resolve(null)
     }
-  }), [settings])
+  }), [settings, skipConfirm, runReal])
 
   const closeModel = useCallback(() => {
     if (modelBusy) return
@@ -108,14 +135,8 @@ export function IeltsProvider({ children }) {
     setModelBusy(true)
     setModelError('')
     try {
-      const result = await invokeTemplate(modelRequest.preview.templateId, modelRequest.variables, {
-        settings,
-        onAudit: event => appendModelAudit(event),
-      })
-      if (result.meta?.auditId) {
-        const verification = verifyTemplateEvidence(modelRequest.preview.templateId, modelRequest.variables, result.data)
-        if (verification) updateAuditEvidence(result.meta.auditId, verification)
-      }
+      const result = await runReal(modelRequest.preview.templateId, modelRequest.variables)
+      if (rememberChoice) setSkipConfirm('real')
       modelRequest.resolve(result)
       setModelRequest(null)
     } catch (error) {
@@ -129,6 +150,7 @@ export function IeltsProvider({ children }) {
     if (!modelRequest) return
     try {
       const result = buildMockOutput(modelRequest.preview.templateId, modelRequest.variables)
+      if (rememberChoice) setSkipConfirm('mock')
       modelRequest.resolve(result)
       setModelRequest(null)
       setModelError('')
@@ -138,6 +160,8 @@ export function IeltsProvider({ children }) {
   }
 
   const value = useMemo(() => ({
+    skipConfirm,
+    resumeConfirm: () => { setSkipConfirm(''); setRememberChoice(false) },
     settings,
     updateSettings,
     records,
@@ -154,7 +178,7 @@ export function IeltsProvider({ children }) {
     gradeReviewItem,
     requestModel,
     hasKey: !!settings.apiKey,
-  }), [settings, updateSettings, records, refreshRecords, vocabState, updateVocab, replacements, addReplacement, knowledgeState, updateKnowledge, reviewSchedule, replaceReviewSchedule, resetLearnerCollections, gradeReviewItem, requestModel])
+  }), [settings, updateSettings, records, refreshRecords, vocabState, updateVocab, replacements, addReplacement, knowledgeState, updateKnowledge, reviewSchedule, replaceReviewSchedule, resetLearnerCollections, gradeReviewItem, requestModel, skipConfirm])
 
   return (
     <IeltsContext.Provider value={value}>
@@ -199,6 +223,10 @@ export function IeltsProvider({ children }) {
             </details>
             {!settings.apiKey && <Notice tone="danger">没有 API key。你仍可使用明确标注的模拟反馈完成流程，或先去设置配置自己的 key。</Notice>}
             {modelError && <Notice tone="danger" title="本次请求失败">{modelError}</Notice>}
+            <label className="flex items-start gap-2 text-[11px] leading-5 text-fg-muted">
+              <input type="checkbox" className="mt-1" checked={rememberChoice} onChange={event => setRememberChoice(event.target.checked)} />
+              这次打开期间不再询问，按这次的选择直接处理（适合连续追问；刷新页面后恢复询问，顶栏可随时恢复）。
+            </label>
             <p className="text-[11px] text-fg-faint">API key 只保存在本机浏览器；请求预览与日志不会写入模型 key。</p>
           </div>
         )}

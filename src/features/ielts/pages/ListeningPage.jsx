@@ -3,14 +3,27 @@ import { useIelts } from '../context/IeltsContext.jsx'
 import { rawToBand, verifyEvidence } from '../core/index.js'
 import { LISTENING_CAUSES, LISTENING_QUICK_TAGS, TYPE_LABELS } from '../data/causes.js'
 import { SAMPLE_LISTENING } from '../data/samples.js'
-import { parseReviewPaste } from '../domain/parse.js'
 import { evaluateQuestions, mistakeFromResult, reviewStats, seriesKey } from '../domain/review.js'
 import { addMistakeRecords, updateMistakeRecord } from '../../../services/storage/MistakesStore.js'
-import { loadReviewSummaries, saveMaterial, saveReviewSummary } from '../storage.js'
-import QuickEntry from '../components/QuickEntry.jsx'
+import { getActiveMethod, loadReviewSummaries, saveReviewSummary } from '../storage.js'
+import MethodCard from '../components/MethodCard.jsx'
+import ThreeBoxEntry from '../components/ThreeBoxEntry.jsx'
 import PracticeTimer from '../components/PracticeTimer.jsx'
-import QuestionEditor from '../components/QuestionEditor.jsx'
-import { Badge, Button, Field, Notice, PageHeader, Panel, SectionTitle, SettingsLink, TextArea, TextInput } from '../components/ui.jsx'
+import { Badge, Button, Field, Notice, PageHeader, Panel, SectionTitle, SettingsLink, TextArea } from '../components/ui.jsx'
+
+/** The original sample as three boxes, so "载入原创示例" shows the real entry flow. */
+function sampleBoxes() {
+  const gaps = SAMPLE_LISTENING.questions.filter(question => question.type === 'gap')
+  const choice = SAMPLE_LISTENING.questions.filter(question => question.type !== 'gap')
+  const questionsText = [
+    `Questions 1-${gaps.length}`,
+    'Write ONE WORD AND/OR A NUMBER for each answer.',
+    ...gaps.map(question => `${question.number} ${question.prompt}`),
+    ...choice.flatMap(question => [`Question ${question.number}`, 'Choose the correct letter.', `${question.number} ${question.prompt}`, ...(question.options || [])]),
+  ].join('\n')
+  const answersText = SAMPLE_LISTENING.questions.map(question => `${question.number} ${question.key} | ${question.userAnswer}`).join('\n')
+  return { source: SAMPLE_LISTENING.source, text: SAMPLE_LISTENING.transcript, questionsText, answersText }
+}
 
 function newId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return `listening-${crypto.randomUUID()}`
@@ -19,16 +32,9 @@ function newId() {
 
 export default function ListeningPage() {
   const { settings, requestModel, refreshRecords, addReplacement } = useIelts()
+  const method = useMemo(() => getActiveMethod('listening'), [])
   const [started, setStarted] = useState(false)
   const [transcript, setTranscript] = useState('')
-  const [source, setSource] = useState('')
-  const [elapsedMinutes, setElapsedMinutes] = useState('')
-  const [saveFullSource, setSaveFullSource] = useState(false)
-  const [saveToLibrary, setSaveToLibrary] = useState(false)
-  const [pasteQuestions, setPasteQuestions] = useState('')
-  const [pasteAnswers, setPasteAnswers] = useState('')
-  const [pasteUser, setPasteUser] = useState('')
-  const [questions, setQuestions] = useState([])
   const [review, setReview] = useState(null)
   const [results, setResults] = useState([])
   const [explanations, setExplanations] = useState({})
@@ -37,26 +43,6 @@ export default function ListeningPage() {
   const [busyId, setBusyId] = useState('')
   const [error, setError] = useState('')
   const stats = useMemo(() => reviewStats(results.map(result => ({ ...result, cause: explanations[result.id]?.cause || result.cause }))), [results, explanations])
-
-  const loadSample = () => {
-    setTranscript(SAMPLE_LISTENING.transcript)
-    setSource(SAMPLE_LISTENING.source)
-    setQuestions(SAMPLE_LISTENING.questions.map(question => ({ ...question, options: [...(question.options || [])] })))
-    setReflections({ ...SAMPLE_LISTENING.reflections })
-    setPasteQuestions('')
-    setPasteAnswers('')
-    setPasteUser('')
-  }
-
-  const parsePaste = () => {
-    const parsed = parseReviewPaste(pasteQuestions, pasteAnswers, pasteUser)
-    if (!parsed.length) {
-      setError('没有识别到编号题目，请确认每题以编号开头。')
-      return
-    }
-    setQuestions(parsed)
-    setError('')
-  }
 
   const persistRecords = (nextExplanations = explanations, currentResults = results, currentReview = review, nextReflections = reflections) => {
     if (!currentReview) return
@@ -69,40 +55,33 @@ export default function ListeningPage() {
     refreshRecords()
   }
 
-  const startReview = () => {
-    if (!transcript.trim() || questions.length === 0) {
-      setError('听力文稿和至少一道题是必填项。')
-      return
-    }
-    if (questions.some(question => !String(question.key).trim())) {
-      setError('每道题都需要答案册答案。')
-      return
-    }
-    if (saveToLibrary) {
-      try {
-        saveMaterial({ module: 'listening', source, passage: transcript, questions })
-      } catch (saveError) {
-        setError(saveError.message)
-        return
-      }
-    }
-    const evaluated = evaluateQuestions(questions, Object.fromEntries(questions.map(question => [question.id, question.userAnswer || ''])))
-    const createdAt = Date.now()
+  const startReview = ({ source, elapsedMinutes, text, questions, saveFullSource }) => {
+    const evaluated = evaluateQuestions(questions)
     const computed = reviewStats(evaluated)
     const nextReview = {
-      id: newId(), module: 'listening', source: source.trim() || '未标注来源', createdAt,
-      saveFullSource, fullSource: transcript,
+      id: newId(), module: 'listening', source: source || '未标注来源', createdAt: Date.now(),
+      saveFullSource, fullSource: text,
       elapsedSeconds: elapsedMinutes ? Number(elapsedMinutes) * 60 : 0,
+      methodId: method?.id || '',
       ...computed,
     }
+    // The original sample ships with example reflections; map them onto this run's question ids.
+    const sampleReflections = source === SAMPLE_LISTENING.source
+      ? Object.fromEntries(evaluated.map(result => {
+        const original = SAMPLE_LISTENING.questions.find(question => String(question.number) === String(result.number))
+        return [result.id, SAMPLE_LISTENING.reflections[original?.id] || '']
+      }).filter(([, text]) => text))
+      : {}
+    setTranscript(text)
     setReview(nextReview)
     setResults(evaluated)
     setExplanations({})
+    setReflections(sampleReflections)
     setSummary(null)
     setStarted(true)
     setError('')
     saveReviewSummary(nextReview)
-    const records = evaluated.filter(result => !result.correct).map(result => mistakeFromResult({ ...nextReview, reflections }, result, null))
+    const records = evaluated.filter(result => !result.correct).map(result => mistakeFromResult({ ...nextReview, reflections: sampleReflections }, result, null))
     if (records.length) addMistakeRecords(records)
     refreshRecords()
   }
@@ -313,58 +292,13 @@ export default function ListeningPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        eyebrow="LISTENING REVIEW"
-        title="听力复盘"
-        description="按一个 Part 复盘。系统不播放或处理音频；你只需录入听力文稿、题目、答案册和答案，再结合自己的反思定位当时发生了什么。"
-        actions={<><Button variant="subtle" onClick={loadSample}>载入原创示例</Button><Badge tone="warning">原创示例非真题</Badge></>}
-      />
+      <PageHeader eyebrow="LISTENING REVIEW" title="听力复盘" description="按一个 Part 复盘。系统不播放、不处理音频：贴文稿、题目、答案，判题后结合你的反思找到当时发生了什么。" />
+      {method && <MethodCard module="listening" method={method} />}
       {error && <Notice tone="danger">{error}</Notice>}
-      <div className="grid gap-4 lg:grid-cols-[1fr_290px]">
-        <div className="space-y-4">
-          <QuickEntry
-            module="listening"
-            questions={questions}
-            setQuestions={setQuestions}
-            saveToLibrary={saveToLibrary}
-            setSaveToLibrary={setSaveToLibrary}
-            onLoadMaterial={material => {
-              setSource(material.source)
-              setTranscript(material.passage)
-              setQuestions(material.questions.map(question => ({ ...question, userAnswer: '' })))
-              setReflections({})
-            }}
-          />
-          <Panel>
-            <SectionTitle title="1 · 听力文稿与来源" hint="文稿逐字用于答案定位和证据校验。" />
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="来源标签"><TextInput value={source} onChange={event => setSource(event.target.value)} placeholder="例如：剑 18 Test 2 Part 3（仅你有权使用的材料）" /></Field>
-              <Field label="实际用时（分钟，可选）"><TextInput type="number" min="0" value={elapsedMinutes} onChange={event => setElapsedMinutes(event.target.value)} placeholder="10" /></Field>
-              <Field label="保存策略"><div className="rounded-xl border border-border-soft bg-surface px-3 py-2 text-xs text-fg-muted">默认仅保留错题定位片段</div></Field>
-            </div>
-            <Field label="英文听力文稿" className="mt-3"><TextArea rows={8} value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="粘贴你有权使用的听力文稿。系统不处理音频。" /></Field>
-            <label className="mt-2 flex items-start gap-2 text-[11px] leading-5 text-fg-muted"><input type="checkbox" checked={saveFullSource} onChange={event => setSaveFullSource(event.target.checked)} className="mt-1" />保存完整听力文稿（可在设置中一键删除）。</label>
-          </Panel>
-          <Panel>
-            <SectionTitle title="2 · 题目、答案与作答" hint="按 Part 的 10 题录入，支持整段粘贴自动拆题。" />
-            <div className="grid gap-3 md:grid-cols-3">
-              <Field label="题目整段粘贴"><TextArea rows={5} value={pasteQuestions} onChange={event => setPasteQuestions(event.target.value)} placeholder={'1. The station opens at ______.\n2. …'} /></Field>
-              <Field label="答案册整段粘贴"><TextArea rows={5} value={pasteAnswers} onChange={event => setPasteAnswers(event.target.value)} placeholder={'1. nine\n2. slot'} /></Field>
-              <Field label="我的答案整段粘贴"><TextArea rows={5} value={pasteUser} onChange={event => setPasteUser(event.target.value)} placeholder={'1. eight\n2. slots'} /></Field>
-            </div>
-            <Button className="mt-3 text-xs" onClick={parsePaste}>智能拆题</Button>
-            <div className="mt-4"><QuestionEditor questions={questions} setQuestions={setQuestions} /></div>
-          </Panel>
-        </div>
-        <aside className="space-y-4">
-          <Panel>
-            <SectionTitle title="复盘单位" />
-            <p className="text-xs leading-6 text-fg-muted">一个 Part 通常是 10 题。判题后，每道错题都可以补一段中文反思，模型会把它作为错因推断依据并标明“推断”。</p>
-            <Button className="mt-3 w-full" onClick={startReview}>开始判题</Button>
-            {questions.length === 0 && <p className="mt-2 text-[11px] text-fg-faint">可先载入原创示例体验完整流程。</p>}
-          </Panel>
-          <Notice tone="warning" title="不处理音频">系统不会上传、播放或保存音频。语音转文字由你的输入法完成，再把文本粘贴到“我的反思”。</Notice>
-        </aside>
+      <ThreeBoxEntry module="listening" sample={sampleBoxes()} onStart={startReview} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <PracticeTimer minutes={10} label="一个 Part 复盘计时（可选）" />
+        <Notice tone="warning" title="不处理音频">系统不会上传、播放或保存音频。语音转文字由你的输入法完成，再把文本粘贴到“我的反思”。</Notice>
       </div>
     </div>
   )

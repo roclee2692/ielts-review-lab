@@ -33,14 +33,23 @@ function listeningCause(vars) {
 }
 
 function mockReading(vars) {
+  const hasPassage = !!String(vars.passage || '').trim()
   const evidence = firstEvidence(vars.passage)
   const cause = ruleCause(vars)
   return {
-    locationQuote: evidence.quote,
+    stemReading: `模拟反馈：配置模型后，这里先讲题干“${String(vars.question || '').slice(0, 60)}”在问什么、有哪些限定。`,
+    locateRoute: hasPassage ? '模拟反馈：配置模型后，这里讲从哪个定位词出发、在原文哪一段、为什么是这里。' : '没有原文，无法讲定位路径。',
+    locationQuote: hasPassage ? evidence.quote : '',
     locationHint: evidence.hint,
+    sentenceBreakdown: [],
     synonymPairs: [],
     whyKeyCorrect: `模拟反馈：答案册给出“${vars.answerKey}”。请在配置模型后获得基于原文的逐句解释。`,
     whyUserWrong: `你的答案“${vars.userAnswer || '未作答'}”与答案册不一致；当前为明确标注的模拟反馈。`,
+    fromYourView: vars.situation ? `模拟反馈：你说“${String(vars.situation).slice(0, 80)}”。配置模型后会从这里讲起。` : '模拟反馈：先点一下你做这题时的处境，讲解会从你卡住的地方讲起。',
+    uncertainty: hasPassage ? '这是模拟反馈，不是真实讲解。' : '没有原文，讲解无法逐字校验。',
+    vocab: [],
+    methodTip: vars.method ? '模拟反馈：配置模型后，会按你的做题方法说下次在哪一步怎么做。' : '',
+    askUser: '',
     cause,
     causeBasis: Array.isArray(vars.ruleErrors) && vars.ruleErrors.length ? 'rule' : 'model',
   }
@@ -167,6 +176,7 @@ export function buildMockOutput(templateId, variables) {
       answer: '模拟回答：配置模型后，这里只会依据原文与答案册解释这道题。',
       evidenceQuotes: firstEvidence(variables.passage).quote ? [firstEvidence(variables.passage).quote] : [],
       uncertain: true,
+      askUser: '',
     }
   } else if (templateId === 'ielts.writing.feedback') data = mockWriting(variables)
   else if (templateId === 'ielts.speaking.feedback') data = mockSpeaking(variables)

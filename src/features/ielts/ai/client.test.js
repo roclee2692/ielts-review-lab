@@ -17,6 +17,8 @@ const readingVariables = {
   instruction: 'ONE WORD AND/OR A NUMBER',
   ruleErrors: [],
   strictness: 'standard',
+  situation: '',
+  method: '',
 }
 
 function modelResponse(data) {

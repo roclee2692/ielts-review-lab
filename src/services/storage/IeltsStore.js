@@ -15,6 +15,8 @@ export const IELTS_KEYS = Object.freeze({
   reviewSchedule: 'irl-ielts-review-schedule',
   modelAudit: 'irl-ielts-model-audit',
   materials: 'irl-ielts-materials',
+  methods: 'irl-ielts-methods',
+  dictation: 'irl-ielts-dictation',
 })
 
 export const DEFAULT_IELTS_SETTINGS = Object.freeze({
@@ -80,6 +82,8 @@ export function exportIeltsData() {
     reviewSchedule: readJson(IELTS_KEYS.reviewSchedule, { version: 1, items: {} }),
     modelAudit: readJson(IELTS_KEYS.modelAudit, []),
     materials: readJson(IELTS_KEYS.materials, []),
+    methods: readJson(IELTS_KEYS.methods, { active: {}, items: {} }),
+    dictation: readJson(IELTS_KEYS.dictation, { version: 1, words: {} }),
   }
 }
 
@@ -93,6 +97,8 @@ const IMPORTABLE = Object.freeze({
   replacements: IELTS_KEYS.replacements,
   reviewSchedule: IELTS_KEYS.reviewSchedule,
   materials: IELTS_KEYS.materials,
+  methods: IELTS_KEYS.methods,
+  dictation: IELTS_KEYS.dictation,
 })
 
 /**

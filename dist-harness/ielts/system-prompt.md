@@ -40,26 +40,42 @@ Do not edit it directly; run `npm run ielts:export-harness`.
 
 ## 模板定义
 
-### ielts.reading.explain · v1.1.0
+### ielts.reading.explain · v2.0.0
 
-依据用户原文与答案册讲解一道阅读题，并给出可核对证据。
+站在用户做题时的视角讲一道阅读题：题干理解、原文在哪怎么找、句子拆解、同义替换机制与证据强度、用户为什么会错、难词，并给出可核对证据。
 
-变量：passage, question, answerKey, userAnswer, questionType, instruction, ruleErrors, strictness
+变量：passage, question, answerKey, userAnswer, questionType, instruction, ruleErrors, strictness, situation, method
 
 输出结构：
 ```json
 {
   "type": "object",
   "required": [
+    "stemReading",
+    "locateRoute",
     "locationQuote",
     "locationHint",
+    "sentenceBreakdown",
     "synonymPairs",
     "whyKeyCorrect",
     "whyUserWrong",
+    "fromYourView",
+    "uncertainty",
+    "vocab",
+    "methodTip",
+    "askUser",
     "cause",
     "causeBasis"
   ],
   "properties": {
+    "stemReading": {
+      "type": "string",
+      "maxLength": 600
+    },
+    "locateRoute": {
+      "type": "string",
+      "maxLength": 800
+    },
     "locationQuote": {
       "type": "string",
       "maxLength": 1600
@@ -68,6 +84,27 @@ Do not edit it directly; run `npm run ielts:export-harness`.
       "type": "string",
       "maxLength": 300
     },
+    "sentenceBreakdown": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": [
+          "chunk",
+          "meaning"
+        ],
+        "properties": {
+          "chunk": {
+            "type": "string",
+            "maxLength": 240
+          },
+          "meaning": {
+            "type": "string",
+            "maxLength": 240
+          }
+        }
+      }
+    },
     "synonymPairs": {
       "type": "array",
       "maxItems": 8,
@@ -75,16 +112,44 @@ Do not edit it directly; run `npm run ielts:export-harness`.
         "type": "object",
         "required": [
           "question",
-          "passage"
+          "passage",
+          "mechanism",
+          "evidence",
+          "note"
         ],
         "properties": {
           "question": {
             "type": "string",
-            "maxLength": 160
+            "maxLength": 200
           },
           "passage": {
             "type": "string",
-            "maxLength": 160
+            "maxLength": 300
+          },
+          "mechanism": {
+            "type": "string",
+            "enum": [
+              "词义替换",
+              "短语替换",
+              "词性转换",
+              "整句逻辑改写",
+              "具体→抽象",
+              "抽象→具体",
+              "否定/反义改写",
+              "原词复现"
+            ]
+          },
+          "evidence": {
+            "type": "string",
+            "enum": [
+              "直接对应",
+              "需逻辑推导",
+              "证据不完整"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 300
           }
         }
       }
@@ -97,6 +162,51 @@ Do not edit it directly; run `npm run ielts:export-harness`.
       "type": "string",
       "maxLength": 1200
     },
+    "fromYourView": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "uncertainty": {
+      "type": "string",
+      "maxLength": 600
+    },
+    "vocab": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": [
+          "en",
+          "zh",
+          "priority"
+        ],
+        "properties": {
+          "en": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "zh": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "高价值",
+              "认识即可"
+            ]
+          }
+        }
+      }
+    },
+    "methodTip": {
+      "type": "string",
+      "maxLength": 400
+    },
+    "askUser": {
+      "type": "string",
+      "maxLength": 300
+    },
     "cause": {
       "type": "string",
       "enum": [
@@ -105,6 +215,7 @@ Do not edit it directly; run `npm run ielts:export-harness`.
         "过度推断（用了原文没有的信息）",
         "判断题规则混淆（FALSE 与 NOT GIVEN）",
         "题型理解错误",
+        "读题失误（看错题干或要求）",
         "拼写或格式",
         "单复数",
         "超字数",
@@ -127,6 +238,13 @@ Do not edit it directly; run `npm run ielts:export-harness`.
 - 不得重新做题，不得用常识补充事实，不得推翻答案册。
 - 所有 locationQuote/evidenceQuote 必须逐字摘自给定原文；找不到就留空并说明无法可靠定位。
 - 只解释为什么答案册的答案正确、用户答案为什么错误。
+- 站在用户做这道题时的视角讲：先说题干在问什么，再说原文在哪、怎么从定位词找过去，再拆原文句子，最后结合用户自述的处境说他为什么会那样答。
+- 证据不足时在 uncertainty 里直说，并把相应替换的 evidence 标为“证据不完整”；不要为了圆答案册硬造推理。
+- 同义替换必须保留原句的信息关系和限定；话题相近不等于题干的每个限定都成立。
+- 没有原文时 locationQuote 留空、sentenceBreakdown 为空数组，并在 uncertainty 说明讲解无法逐字校验。
+- vocab 只收高价值、可复用的词块；低频专业词标“认识即可”。
+- 用户给了做题方法时，methodTip 用他的方法的步骤名来说下次在哪一步怎么做；没给方法就给一条通用做法。
+- 需要用户补充信息才能讲准时，在 askUser 里问一个具体问题；不需要就留空。
 - 判断题必须说明 FALSE 与 NOT GIVEN 的差别落在哪里。
 
 ### ielts.listening.explain · v1.0.0
@@ -187,6 +305,9 @@ Do not edit it directly; run `npm run ielts:export-harness`.
         "单复数",
         "超字数",
         "漏听",
+        "定位丢失（没跟上题号）",
+        "读题失误（看错题干或要求）",
+        "主语追踪（谁说了什么没跟上）",
         "同义改述没识别",
         "被干扰或改口误导",
         "数字时间日期",
@@ -293,11 +414,11 @@ Do not edit it directly; run `npm run ielts:export-harness`.
 - nextActions 最多两条，必须是下一次可直接执行的动作。
 - 不写空泛鼓励。
 
-### ielts.reading.followup · v1.0.0
+### ielts.reading.followup · v2.0.0
 
-回答用户针对单道阅读题的追问。
+就一道阅读题和用户多轮对话：接着他的问题和他做题时的想法讲，仍只依据原文。
 
-变量：passage, question, answerKey, userAnswer, history, followup
+变量：passage, question, answerKey, userAnswer, history, situation, messages, followup
 
 输出结构：
 ```json
@@ -306,7 +427,8 @@ Do not edit it directly; run `npm run ielts:export-harness`.
   "required": [
     "answer",
     "evidenceQuotes",
-    "uncertain"
+    "uncertain",
+    "askUser"
   ],
   "properties": {
     "answer": {
@@ -323,6 +445,10 @@ Do not edit it directly; run `npm run ielts:export-harness`.
     },
     "uncertain": {
       "type": "boolean"
+    },
+    "askUser": {
+      "type": "string",
+      "maxLength": 300
     }
   }
 }
@@ -334,6 +460,7 @@ Do not edit it directly; run `npm run ielts:export-harness`.
 - 所有 locationQuote/evidenceQuote 必须逐字摘自给定原文；找不到就留空并说明无法可靠定位。
 - 只解释为什么答案册的答案正确、用户答案为什么错误。
 - 证据不足时把 uncertain 设为 true，并明确说明不能从原文确认。
+- 接着对话往下讲，不重复已经讲过的内容；用户说的是他当时的想法时，先回应这个想法对在哪、偏在哪。
 
 ### ielts.writing.feedback · v1.0.0
 

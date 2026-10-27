@@ -127,9 +127,59 @@ export function buildWeaknessProfile(records = []) {
     total: records.filter(item => item.domain === 'ielts').length,
     byCause: sortCounts(byCause),
     byType: sortCounts(byType),
-    topCause: sortCounts(byCause)[0]?.[0] || '',
+    // “待归类”不是错因，不能当成最集中的问题。
+    topCause: sortCounts(byCause).find(([cause]) => cause !== '待归类')?.[0] || '',
+    unclassified: byCause['待归类'] || 0,
     topType: sortCounts(byType)[0]?.[0] || '',
     byDate,
     repeatedSynonyms: sortCounts(synonyms).filter(([, count]) => count > 1),
   }
+}
+
+/**
+ * 方法执行趋势：每篇用了某个方法的复盘，记下的指标和得分率，按时间排。
+ * 再比较“最早几篇”和“最近几篇”的平均值，看方法是不是越用越熟。
+ * @param {object[]} reviews review summaries
+ * @param {{ id: string, metrics: { id: string, label: string }[] }} method
+ * @param {number} [span]
+ */
+export function methodTrend(reviews, method, span = 5) {
+  const rows = reviews
+    .filter(review => review.methodId === method.id && review.total > 0)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map(review => ({
+      id: review.id,
+      source: review.source,
+      createdAt: review.createdAt,
+      accuracy: review.correct / review.total,
+      minutes: review.elapsedSeconds ? Math.round(review.elapsedSeconds / 60) : 0,
+      metrics: Object.fromEntries(method.metrics.map(metric => [metric.id, Number(review.methodMetrics?.[metric.id]) || 0])),
+    }))
+  const average = (list, pick) => (list.length ? list.reduce((sum, row) => sum + pick(row), 0) / list.length : null)
+  const early = rows.slice(0, span)
+  const recent = rows.length > span ? rows.slice(-span) : []
+  return {
+    rows,
+    compare: [
+      { id: 'accuracy', label: '得分率', better: 'up', early: average(early, row => row.accuracy), recent: average(recent, row => row.accuracy) },
+      ...method.metrics.map(metric => ({
+        id: metric.id, label: metric.label, better: 'down',
+        early: average(early, row => row.metrics[metric.id]), recent: average(recent, row => row.metrics[metric.id]),
+      })),
+    ],
+  }
+}
+
+/** 同义替换没认出时，替换机制的分布：决定专项练什么。 @param {object[]} records */
+export function synonymMechanismProfile(records) {
+  const counts = {}
+  const evidence = {}
+  for (const record of records.filter(item => item.domain === 'ielts')) {
+    for (const pair of record.synonyms || []) {
+      if (pair.mechanism) counts[pair.mechanism] = (counts[pair.mechanism] || 0) + 1
+      if (pair.evidence) evidence[pair.evidence] = (evidence[pair.evidence] || 0) + 1
+    }
+  }
+  const sort = object => Object.entries(object).sort((a, b) => b[1] - a[1])
+  return { mechanisms: sort(counts), evidence: sort(evidence) }
 }

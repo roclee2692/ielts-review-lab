@@ -10,7 +10,10 @@ import {
   parseAnswerLine,
   verifyEvidence,
 } from '../src/features/ielts/core/index.js'
-import { LISTENING_CAUSES, READING_CAUSES, causeFromErrors } from '../src/features/ielts/data/causes.js'
+import { EVIDENCE_STATUS, LISTENING_CAUSES, READING_CAUSES, SYNONYM_MECHANISMS, causeFromErrors } from '../src/features/ielts/data/causes.js'
+import { BUILTIN_METHODS, methodBrief, normalizeMethod } from '../src/features/ielts/data/methods.js'
+import { buildQuestionsFromBoxes } from '../src/features/ielts/domain/entry.js'
+import { buildReadingReport } from '../src/features/ielts/domain/readingReport.js'
 import { createScheduleEntry, dateKey, gradeScheduleEntry, isReviewDue } from '../src/features/ielts/domain/spacedRepetition.js'
 import { safeId } from './store.js'
 
@@ -92,14 +95,18 @@ function findResult(review, number) {
 /** @type {Record<string, { description: string, inputSchema: object, handler: (store: any, args: any) => any }>} */
 export const TOOLS = {
   ingest_passage: {
-    description: '录入一篇阅读或一个听力 Part：原文/文稿、题目、答案册、用户答案和反思。可以只给 set_id 复用以前录过的同一篇，只填这次的答案。引擎检查题号连续、答案数量、题型和标签合法，有问题会退回让你重新识别。不判题。',
+    description: '录入一篇阅读或一个听力 Part。最省事的给法：source + answer_sheet（答案册和用户答案写在一起，如 "1 FALSE NG\n2 two weeks | two week\n3 B ✓"），可再加 questions_text（整段题目）和 passage。用户没给原文/答案时，你可以按来源联网找，并把 passage_origin / key_origin 设为 web。也可以给结构化的 questions。可以只给 set_id 复用录过的同一篇。引擎检查题号连续、标签合法、答案对得上，有问题会退回。不判题。',
     inputSchema: {
       type: 'object',
       properties: {
         module: { type: 'string', enum: MODULES },
         source: { type: 'string', description: '来源标签，例如“剑 19 Test 2 Passage 1”。同一来源会作为题集复用。' },
         set_id: { type: 'string', description: '复用已录题集（list_sets 返回的 id）。给了它就不用再传 passage/questions。' },
-        passage: { type: 'string', description: '用户有权使用的英文原文或听力文稿，逐字。' },
+        passage: { type: 'string', description: '英文原文或听力文稿，逐字。可以为空（讲解会标为无法校验）。' },
+        passage_origin: { type: 'string', enum: ['user', 'web'], description: '原文来自用户（默认）还是你联网找到的' },
+        key_origin: { type: 'string', enum: ['user', 'web'], description: '答案册来自用户（默认）还是你联网找到的；web 的会在判题结果里标“未核对答案册”' },
+        answer_sheet: { type: 'string', description: '答案册 + 用户答案，一行一题：题号 答案册 [用户答案]。支持 "|"、✓、✗、"(我: x)"、两个判断标签连写。' },
+        questions_text: { type: 'string', description: '整段题目原文，说明行里的题型和字数要求会自动带给后面的题。' },
         questions: {
           type: 'array',
           items: {
@@ -117,12 +124,13 @@ export const TOOLS = {
         },
         user_answers: { type: 'object', description: '题号 → 用户答案，例如 {"1":"TRUE"}', additionalProperties: { type: 'string' } },
         answer_line: { type: 'string', description: '用户答案速记，例如 "1 TRUE 2 NG 3 museum"。和 user_answers 二选一。' },
-        reflections: { type: 'object', description: '听力：题号 → 用户的反思（可中文）', additionalProperties: { type: 'string' } },
+        reflections: { type: 'object', description: '题号 → 用户做这题时的处境或反思（可中文），例如“首次经过答案句没认出”', additionalProperties: { type: 'string' } },
         elapsed_minutes: { type: 'number' },
       },
       required: ['module'],
     },
-    handler(store, args) {
+    handler(store, input) {
+      let args = input
       const module = text(args.module)
       if (!MODULES.includes(module)) throw new ToolError('module 只能是 reading 或 listening')
       let set = args.set_id ? store.getSet(args.set_id) : null
@@ -130,15 +138,27 @@ export const TOOLS = {
       if (!set) {
         const problems = []
         if (!text(args.source)) problems.push('需要 source（来源标签），用来以后复用这篇')
-        if (!text(args.passage)) problems.push('需要 passage（原文或文稿）；讲解的引用要逐字来自它')
-        problems.push(...validateQuestions(args.questions))
+        let questions = args.questions
+        /** @type {Record<string, string>} */
+        let sheetAnswers = {}
+        if (!Array.isArray(questions) || questions.length === 0) {
+          if (!text(args.answer_sheet)) problems.push('需要 answer_sheet（答案册 + 用户答案）或结构化的 questions')
+          else {
+            const built = buildQuestionsFromBoxes({ questionsText: args.questions_text || '', answersText: args.answer_sheet, idPrefix: 'mcp' })
+            questions = built.questions.map(question => ({ number: Number(question.number), type: question.type, prompt: question.prompt, key: question.key, instruction: question.instruction, options: question.options }))
+            sheetAnswers = Object.fromEntries(built.questions.filter(question => !question.mineUnknown).map(question => [question.number, question.userAnswer]))
+          }
+        }
+        if (questions) problems.push(...validateQuestions(questions))
         if (problems.length) throw new ToolError('录入内容有问题，请核对后重新提交', problems)
         set = {
           id: safeId(`${module}-${args.source}`),
           module,
           source: text(args.source),
-          passage: String(args.passage),
-          questions: args.questions.map((/** @type {any} */ question) => ({
+          passage: String(args.passage || ''),
+          passageOrigin: args.passage_origin === 'web' ? 'web' : 'user',
+          keyOrigin: args.key_origin === 'web' ? 'web' : 'user',
+          questions: questions.map((/** @type {any} */ question) => ({
             number: Number(question.number),
             type: question.type,
             prompt: text(question.prompt),
@@ -149,6 +169,7 @@ export const TOOLS = {
           updatedAt: Date.now(),
         }
         store.putSet(set)
+        if (!text(args.answer_line) && !args.user_answers && Object.keys(sheetAnswers).length) args = { ...args, user_answers: sheetAnswers }
       }
       if (set.module !== module) throw new ToolError(`题集 ${set.id} 是 ${set.module}，不是 ${module}`)
 
@@ -183,6 +204,7 @@ export const TOOLS = {
           ? Object.fromEntries(Object.entries(args.reflections).map(([key, value]) => [String(Number(key)), String(value ?? '')]))
           : {},
         results: null,
+        methodId: (resolveMethods(store).find(method => method.id === store.getMethods().active?.[module]) || resolveMethods(store).find(method => method.module === module))?.id || '',
       }
       store.putReview(review)
       return {
@@ -221,28 +243,48 @@ export const TOOLS = {
       const correct = review.results.filter((/** @type {any} */ result) => result.correct).length
       const wrong = review.results.filter((/** @type {any} */ result) => !result.correct)
       return {
-        text: `${review.source}：${correct}/${review.results.length} 正确。错题：${wrong.map((/** @type {any} */ result) => `${result.number}${result.ruleCause ? `（规则判定：${result.ruleCause}）` : ''}`).join('、') || '无'}。\n错题请逐题调用 submit_explanation，错因从 causes 里选。`,
+        text: `${set.keyOrigin === 'web' ? '⚠ 答案册来自网络，未经用户的答案册核对；讲解时要提醒用户。\n' : ''}${set.passage ? '' : '⚠ 没有原文：讲解的引用无法逐字校验。\n'}${review.source}：${correct}/${review.results.length} 正确。错题：${wrong.map((/** @type {any} */ result) => `${result.number}${result.ruleCause ? `（规则判定：${result.ruleCause}）` : ''}`).join('、') || '无'}。\n错题请逐题调用 submit_explanation，错因从 causes 里选。`,
         data: { review_id: review.id, correct, total: review.results.length, results: publicResults(review), causes: causesFor(review.module) },
       }
     },
   },
 
   submit_explanation: {
-    description: '提交一道题的讲解。引擎用原文逐字校验定位句和同义替换的原文一侧，不在原文里就退回。讲解只能解释“为什么答案册对、用户为什么错”，不能推翻答案册；错因必须从固定错因表里选。规则已判定的错因和用户确认过的错因不会被覆盖。',
+    description: '提交一道题的讲解。站在用户做题时的视角：题干在问什么 → 原文在哪、怎么从定位词找过去 → 原文句子怎么拆 → 用户为什么会那样答。引擎逐字校验定位句和同义替换的原文一侧，不在原文里就退回；同义替换要标替换机制和证据强度，证据不够时必须写 uncertainty，不许硬圆。讲解不能推翻答案册；错因必须从固定错因表里选。规则判定和用户确认的错因不会被覆盖。',
     inputSchema: {
       type: 'object',
       properties: {
         review_id: { type: 'string' },
         number: { type: 'integer' },
-        location_quote: { type: 'string', description: '原文里逐字的定位句' },
-        synonym_pairs: { type: 'array', items: { type: 'object', properties: { question: { type: 'string' }, passage: { type: 'string' } }, required: ['question', 'passage'] } },
+        stem_reading: { type: 'string', description: '题干在问什么、有哪些限定' },
+        locate_route: { type: 'string', description: '从哪个定位词出发、在原文哪一段、怎么找过去' },
+        location_quote: { type: 'string', description: '原文里逐字的定位句；没有原文时留空' },
+        sentence_breakdown: { type: 'array', items: { type: 'object', properties: { chunk: { type: 'string' }, meaning: { type: 'string' } }, required: ['chunk', 'meaning'] } },
+        synonym_pairs: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              question: { type: 'string' },
+              passage: { type: 'string' },
+              mechanism: { type: 'string', enum: [...SYNONYM_MECHANISMS] },
+              evidence: { type: 'string', enum: [...EVIDENCE_STATUS] },
+              note: { type: 'string' },
+            },
+            required: ['question', 'passage', 'mechanism', 'evidence'],
+          },
+        },
+        from_your_view: { type: 'string', description: '结合用户说的处境：他当时为什么会这样答、卡在哪' },
+        uncertainty: { type: 'string', description: '证据不足 / 不确定的地方；有“证据不完整”的替换时必填' },
+        vocab: { type: 'array', items: { type: 'object', properties: { en: { type: 'string' }, zh: { type: 'string' }, priority: { type: 'string', enum: ['高价值', '认识即可'] } }, required: ['en', 'zh', 'priority'] } },
+        method_tip: { type: 'string', description: '按用户的做题方法（method 工具），下次在哪一步怎么做' },
         why_key_correct: { type: 'string' },
         why_user_wrong: { type: 'string' },
         cause: { type: 'string', description: '从 judge_set 返回的 causes 里选一个' },
         confidence: { type: 'string', enum: CONFIDENCE },
         advice: { type: 'string', description: '一两句下次可执行的建议' },
       },
-      required: ['review_id', 'number', 'location_quote', 'why_key_correct', 'cause', 'confidence'],
+      required: ['review_id', 'number', 'why_key_correct', 'cause', 'confidence'],
     },
     handler(store, args) {
       const review = loadReview(store, args.review_id)
@@ -250,9 +292,21 @@ export const TOOLS = {
       const set = store.getSet(review.setId)
       const problems = []
       const pairs = Array.isArray(args.synonym_pairs) ? args.synonym_pairs : []
-      const quotes = [text(args.location_quote), ...pairs.map((/** @type {any} */ pair) => text(pair?.passage))]
-      const evidence = verifyEvidence(set?.passage || '', quotes)
-      for (const missing of evidence.missing) problems.push(`这句不在原文里（必须逐字引用）：「${missing}」`)
+      const hasPassage = !!text(set?.passage)
+      if (hasPassage) {
+        if (!text(args.location_quote)) problems.push('有原文时需要 location_quote（原文里逐字的定位句）')
+        const quotes = [text(args.location_quote), ...pairs.map((/** @type {any} */ pair) => text(pair?.passage))].filter(Boolean)
+        const evidence = verifyEvidence(set.passage, quotes)
+        for (const missing of evidence.missing) problems.push(`这句不在原文里（必须逐字引用）：「${missing}」`)
+      } else if (text(args.location_quote)) {
+        problems.push('没有原文，不能给 location_quote：引用无法校验。把定位思路写进 locate_route，并在 uncertainty 说明。')
+      }
+      for (const pair of pairs) {
+        if (!SYNONYM_MECHANISMS.includes(text(pair?.mechanism))) problems.push(`同义替换「${pair?.question} ↔ ${pair?.passage}」的 mechanism 只能是：${SYNONYM_MECHANISMS.join(' / ')}`)
+        if (!EVIDENCE_STATUS.includes(text(pair?.evidence))) problems.push(`同义替换「${pair?.question}」的 evidence 只能是：${EVIDENCE_STATUS.join(' / ')}`)
+      }
+      const incomplete = pairs.some((/** @type {any} */ pair) => text(pair?.evidence) === '证据不完整')
+      if ((incomplete || !hasPassage) && !text(args.uncertainty)) problems.push(incomplete ? '有“证据不完整”的替换，必须在 uncertainty 写明缺了什么，不能当作已证明' : '没有原文时必须在 uncertainty 说明讲解无法校验')
       const causes = causesFor(review.module)
       if (!causes.includes(text(args.cause))) problems.push(`错因「${args.cause}」不在错因表里，只能选：${causes.join(' / ')}`)
       if (!CONFIDENCE.includes(text(args.confidence))) problems.push('confidence 只能是 high / medium / low')
@@ -261,8 +315,16 @@ export const TOOLS = {
       if (problems.length) throw new ToolError('讲解没有通过引擎校验，请改正后重新提交', problems)
 
       result.explanation = {
+        stemReading: text(args.stem_reading),
+        locateRoute: text(args.locate_route),
         locationQuote: text(args.location_quote),
-        synonymPairs: pairs.map((/** @type {any} */ pair) => ({ question: text(pair.question), passage: text(pair.passage) })),
+        sentenceBreakdown: (Array.isArray(args.sentence_breakdown) ? args.sentence_breakdown : []).map((/** @type {any} */ item) => ({ chunk: text(item?.chunk), meaning: text(item?.meaning) })),
+        synonymPairs: pairs.map((/** @type {any} */ pair) => ({ question: text(pair.question), passage: text(pair.passage), mechanism: text(pair.mechanism), evidence: text(pair.evidence), note: text(pair.note) })),
+        fromYourView: text(args.from_your_view),
+        uncertainty: text(args.uncertainty),
+        vocab: (Array.isArray(args.vocab) ? args.vocab : []).map((/** @type {any} */ item) => ({ en: text(item?.en), zh: text(item?.zh), priority: item?.priority === '认识即可' ? '认识即可' : '高价值' })),
+        methodTip: text(args.method_tip),
+        verified: hasPassage,
         whyKeyCorrect: text(args.why_key_correct),
         whyUserWrong: text(args.why_user_wrong),
         advice: text(args.advice),
@@ -396,6 +458,63 @@ export const TOOLS = {
     },
   },
 
+  report: {
+    description: '一篇阅读复盘的三张表（错题表、同义替换表、难词短语表），Markdown 格式，用户可以直接复制。讲解提交得越完整，表越全。',
+    inputSchema: { type: 'object', properties: { review_id: { type: 'string' } }, required: ['review_id'] },
+    handler(store, args) {
+      const review = loadReview(store, args.review_id)
+      if (!review.results) throw new ToolError('还没判题，先调用 judge_set')
+      const set = store.getSet(review.setId)
+      const results = review.results.map((/** @type {any} */ result) => {
+        const question = set?.questions.find((/** @type {any} */ item) => item.number === result.number)
+        return { ...result, id: String(result.number), prompt: question?.prompt || '', ruleCause: result.ruleCause }
+      })
+      const explanations = Object.fromEntries(review.results.map((/** @type {any} */ result) => [String(result.number), {
+        ...(result.explanation || {}),
+        cause: result.cause,
+        causeBasis: result.causeBasis,
+        situation: review.reflections?.[String(result.number)] || '',
+      }]))
+      const methods = resolveMethods(store)
+      const method = methods.find(item => item.id === review.methodId)
+      const report = buildReadingReport({ source: review.source, createdAt: review.createdAt, elapsedSeconds: review.elapsedSeconds }, results, explanations, method ? { methodTitle: method.title } : {})
+      return { text: report.markdown, data: { markdown: report.markdown, mistakes: report.mistakes.length, synonyms: report.synonyms.length, vocab: report.vocab.length } }
+    },
+  },
+
+  method: {
+    description: '用户的做题方法（例如平行阅读法）。复盘前先读一遍，讲题时按他的方法说“下次在哪一步怎么做”。可以查看、设为当前、或保存用户改过的版本。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        module: { type: 'string', enum: MODULES },
+        action: { type: 'string', enum: ['get', 'list', 'use', 'save'] },
+        method_id: { type: 'string' },
+        method: { type: 'object', description: 'save 时传：{ id, module, title, summary, steps:[{title, points[]}], fixes:[{before, after}], principles[], metrics:[{id, label, hint}] }' },
+      },
+    },
+    handler(store, args) {
+      const module = args.module === 'listening' ? 'listening' : 'reading'
+      const action = args.action || 'get'
+      const state = store.getMethods()
+      if (action === 'save') {
+        const method = normalizeMethod(args.method)
+        if (!method) throw new ToolError('method 需要 title')
+        store.putMethods({ ...state, items: { ...state.items, [method.id]: method } })
+        return { text: `已保存方法「${method.title}」。`, data: { id: method.id } }
+      }
+      const methods = resolveMethods(store).filter(method => method.module === module)
+      if (action === 'list') return { text: methods.map(method => `- ${method.id}：${method.title}${state.active[module] === method.id ? '（当前）' : ''}`).join('\n') || '没有方法', data: { methods: methods.map(method => ({ id: method.id, title: method.title })) } }
+      if (action === 'use') {
+        if (!methods.some(method => method.id === args.method_id)) throw new ToolError(`没有方法 ${args.method_id}`)
+        store.putMethods({ ...state, active: { ...state.active, [module]: args.method_id } })
+        return { text: `${module} 的当前方法改为 ${args.method_id}。`, data: { id: args.method_id } }
+      }
+      const active = methods.find(method => method.id === state.active[module]) || methods[0]
+      return { text: active ? methodBrief(active) : '没有设置做题方法。', data: { method: active || null } }
+    },
+  },
+
   list_sets: {
     description: '列出已录过的题集（同一本书同一篇只录一次），重做时把 set_id 传给 ingest_passage，只填这次的答案。',
     inputSchema: { type: 'object', properties: { module: { type: 'string', enum: MODULES } } },
@@ -406,6 +525,14 @@ export const TOOLS = {
       return { text: sets.length ? sets.map((/** @type {any} */ set) => `- ${set.id}：${set.source}（${set.questions} 题）`).join('\n') : '还没有题集。', data: { sets } }
     },
   },
+}
+
+/** Built-in methods (possibly edited) plus the learner's own, from the data folder. */
+function resolveMethods(/** @type {any} */ store) {
+  const state = store.getMethods()
+  const builtins = BUILTIN_METHODS.map(method => normalizeMethod(state.items?.[method.id]) ? { ...normalizeMethod(state.items[method.id]), id: method.id } : method)
+  const custom = Object.values(state.items || {}).map(normalizeMethod).filter(method => method && !BUILTIN_METHODS.some(builtin => builtin.id === method.id))
+  return [...builtins, ...custom]
 }
 
 /** Wrong answers enter the schedule the first time they are judged. */

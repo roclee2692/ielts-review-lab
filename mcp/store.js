@@ -4,6 +4,7 @@
 //   <dir>/sets/<id>.json       passage/transcript + questions + answer key
 //   <dir>/reviews/<id>.json    one attempt: answers, verdicts, causes, explanations
 //   <dir>/schedule.json        spaced-review entries for wrong questions
+//   <dir>/methods.json         the learner's edited / own study methods
 
 import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -57,5 +58,7 @@ export function createStore(dir = defaultDataDir()) {
     listReviews: () => all(reviews).sort((a, b) => a.createdAt - b.createdAt),
     getSchedule: () => read(join(dir, 'schedule.json'), { version: 1, items: {} }),
     putSchedule: (/** @type {any} */ schedule) => write(join(dir, 'schedule.json'), schedule),
+    getMethods: () => read(join(dir, 'methods.json'), { active: {}, items: {} }),
+    putMethods: (/** @type {any} */ methods) => write(join(dir, 'methods.json'), methods),
   }
 }

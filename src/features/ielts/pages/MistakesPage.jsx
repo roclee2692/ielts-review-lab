@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useIelts } from '../context/IeltsContext.jsx'
 import { LISTENING_CAUSES, MODULE_LABELS, READING_CAUSES, TYPE_LABELS } from '../data/causes.js'
-import { buildWeaknessProfile } from '../domain/review.js'
+import { buildWeaknessProfile, methodTrend, synonymMechanismProfile } from '../domain/review.js'
 import { causeRecurrence } from '../core/index.js'
-import { loadReviewSummaries } from '../storage.js'
+import { loadMethods, loadReviewSummaries } from '../storage.js'
 import { buildReviewQueue } from '../domain/spacedRepetition.js'
 import { deleteMistakeRecord, updateMistakeRecord } from '../../../services/storage/MistakesStore.js'
 import { Badge, Button, EmptyState, Field, Notice, PageHeader, Panel, SectionTitle, Select, StatTile, TextInput } from '../components/ui.jsx'
@@ -21,6 +21,14 @@ export default function MistakesPage() {
   const [practiceKey, setPracticeKey] = useState(null)
 
   const profile = useMemo(() => buildWeaknessProfile(records), [records])
+  const trends = useMemo(() => {
+    const reviews = loadReviewSummaries()
+    return loadMethods()
+      .map(method => ({ method, ...methodTrend(reviews, method) }))
+      .filter(trend => trend.rows.length > 0)
+    // Review summaries live outside React state; re-read them whenever mistakes change.
+  }, [records]) // eslint-disable-line react-hooks/exhaustive-deps
+  const mechanisms = useMemo(() => synonymMechanismProfile(records), [records])
   const recurrence = useMemo(() => causeRecurrence(
     loadReviewSummaries().map(review => ({ id: review.id, module: review.module, createdAt: review.createdAt })),
     records.filter(record => record.domain === 'ielts').map(record => ({ reviewId: record.metadata?.reviewId, module: record.module, cause: record.errorCause })),
@@ -69,7 +77,7 @@ export default function MistakesPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="IELTS 错题" value={profile.total} tone="danger" />
         <StatTile label="最常错题型" value={profile.topType ? TYPE_LABELS[profile.topType] || profile.topType : '暂无'} tone="info" />
-        <StatTile label="最集中错因" value={profile.topCause || '暂无'} tone="warning" />
+        <StatTile label="最集中错因" value={profile.topCause || '暂无'} tone="warning" hint={profile.unclassified ? `另有 ${profile.unclassified} 题还没定错因` : undefined} />
         <StatTile label="反复替换" value={profile.repeatedSynonyms.length} tone="accent" hint="出现两次及以上" />
       </div>
 
@@ -96,6 +104,51 @@ export default function MistakesPage() {
           </div>
         )}
       </Panel>
+
+      {trends.map(({ method, rows, compare }) => (
+        <Panel key={method.id}>
+          <SectionTitle title={`${method.title} · 执行趋势`} hint={`${rows.length} 篇用了这个方法。最早 5 篇和最近 5 篇比：得分率越高越好，执行指标越低越好。`} />
+          <div className="grid gap-2 sm:grid-cols-3">
+            {compare.map(item => {
+              const fmt = value => (value === null ? '—' : item.id === 'accuracy' ? `${Math.round(value * 100)}%` : value.toFixed(1))
+              const improved = item.recent !== null && item.early !== null && (item.better === 'up' ? item.recent > item.early : item.recent < item.early)
+              return (
+                <div key={item.id} className="rounded-xl border border-border-soft bg-surface p-3 text-xs">
+                  <p className="text-fg-faint">{item.label}</p>
+                  <p className="mt-1 font-mono text-fg">{fmt(item.early)} → {fmt(item.recent)}</p>
+                  {item.recent === null ? <p className="mt-1 text-[10px] text-fg-faint">做满 6 篇才比较</p> : <p className={`mt-1 text-[10px] ${improved ? 'text-success' : 'text-warning'}`}>{improved ? '在变好' : '还没变好'}</p>}
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[480px] text-left text-xs">
+              <thead className="text-[10px] text-fg-faint"><tr><th className="py-1.5 pr-2">日期</th><th className="py-1.5 pr-2">来源</th><th className="py-1.5 pr-2">得分率</th><th className="py-1.5 pr-2">用时</th>{method.metrics.map(metric => <th key={metric.id} className="py-1.5 pr-2">{metric.label}</th>)}</tr></thead>
+              <tbody>
+                {rows.slice(-10).reverse().map(row => (
+                  <tr key={row.id} className="border-t border-border-soft text-fg-muted">
+                    <td className="py-2 pr-2">{new Date(row.createdAt).toLocaleDateString('zh-CN')}</td>
+                    <td className="py-2 pr-2 text-fg">{row.source}</td>
+                    <td className="py-2 pr-2 font-mono">{Math.round(row.accuracy * 100)}%</td>
+                    <td className="py-2 pr-2 font-mono">{row.minutes ? `${row.minutes}′` : '—'}</td>
+                    {method.metrics.map(metric => <td key={metric.id} className="py-2 pr-2 font-mono">{row.metrics[metric.id]}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      ))}
+
+      {mechanisms.mechanisms.length > 0 && (
+        <Panel>
+          <SectionTitle title="同义替换：没认出的是哪种换法" hint="来自讲过的题。最多的那种换法就是该专项练的。" />
+          <div className="flex flex-wrap gap-2">
+            {mechanisms.mechanisms.map(([name, count]) => <Badge key={name} tone="accent">{name} · {count}</Badge>)}
+            {mechanisms.evidence.map(([name, count]) => <Badge key={name} tone={name === '证据不完整' ? 'warning' : 'neutral'}>{name} · {count}</Badge>)}
+          </div>
+        </Panel>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel>
@@ -169,7 +222,7 @@ export default function MistakesPage() {
                   <div className="flex flex-wrap gap-2">
                     <Badge tone={record.module === 'listening' ? 'info' : record.module === 'algorithm' ? 'neutral' : 'accent'}>{MODULE_LABELS[record.module] || record.module}</Badge>
                     <Badge>{TYPE_LABELS[record.type] || record.type}</Badge>
-                    <Badge tone={record.causeSource === 'rule' ? 'success' : record.causeSource === 'user' ? 'accent' : 'warning'}>{record.causeSource === 'rule' ? '规则判定' : record.causeSource === 'user' ? '用户修正' : '模型/迁移建议'}</Badge>
+                    <Badge tone={record.causeSource === 'rule' ? 'success' : record.causeSource === 'user' || record.causeSource === 'tag' ? 'accent' : 'warning'}>{record.errorCause === '待归类' ? '还没定错因' : record.causeSource === 'rule' ? '规则判定' : record.causeSource === 'user' ? '你确认' : record.causeSource === 'tag' ? '按你点的处境' : record.causeSource === 'inference' ? '推断' : '模型建议'}</Badge>
                     <span className="text-[10px] text-fg-faint">{new Date(record.createdAt).toLocaleString('zh-CN')} · {record.source}</span>
                   </div>
                   <p className="mt-2 text-sm font-semibold leading-6 text-fg">{record.questionSummary}</p>

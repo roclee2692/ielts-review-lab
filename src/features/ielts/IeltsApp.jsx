@@ -11,6 +11,8 @@ import WritingPage from './pages/WritingPage.jsx'
 import SpeakingPage from './pages/SpeakingPage.jsx'
 import VocabPage from './pages/VocabPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
+import MethodsPage from './pages/MethodsPage.jsx'
+import DictationPage from './pages/DictationPage.jsx'
 import { EmptyState } from './components/ui.jsx'
 
 const PAGES = {
@@ -24,6 +26,8 @@ const PAGES = {
   '/ielts/speaking': SpeakingPage,
   '/ielts/vocab': VocabPage,
   '/ielts/settings': SettingsPage,
+  '/ielts/methods': MethodsPage,
+  '/ielts/dictation': DictationPage,
 }
 export default function IeltsApp() {
   const { pathname } = useLocation()

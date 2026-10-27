@@ -5,8 +5,10 @@ import { Badge } from './components/ui.jsx'
 
 const NAV_ITEMS = [
   { href: '/ielts', label: '总览', icon: '◎' },
+  { href: '/ielts/methods', label: '做题方法', icon: 'M' },
   { href: '/ielts/reading', label: '阅读复盘', icon: 'R' },
   { href: '/ielts/listening', label: '听力复盘', icon: 'L' },
+  { href: '/ielts/dictation', label: '拼写听写', icon: '✎' },
   { href: '/ielts/mistakes', label: '错题与弱点', icon: '✕' },
   { href: '/ielts/sets', label: '整套复盘', icon: '≡' },
   { href: '/ielts/review', label: '今日复习', icon: '↻' },
@@ -18,7 +20,7 @@ const NAV_ITEMS = [
 
 export default function IeltsShell({ children }) {
   const { pathname } = useLocation()
-  const { hasKey } = useIelts()
+  const { hasKey, skipConfirm, resumeConfirm } = useIelts()
   const [theme, setTheme] = useState(() => (typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme')) || 'dark')
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark'
@@ -42,6 +44,7 @@ export default function IeltsShell({ children }) {
             <Badge tone="warning" title="所有材料和数据均只保存在当前浏览器">本地优先</Badge>
           </div>
           <div className="flex items-center gap-2 text-xs">
+            {skipConfirm && <button type="button" className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning" onClick={resumeConfirm} title="点一下恢复每次发送前确认">{skipConfirm === 'mock' ? '直接用模拟反馈' : '直接发送中'} · 恢复询问</button>}
             <Badge tone={hasKey ? 'success' : 'neutral'}>{hasKey ? '模型已配置' : '未配置模型 · 可用模拟反馈'}</Badge>
             <button type="button" className="icon-btn" onClick={toggleTheme} aria-label={theme === 'dark' ? '切换到浅色' : '切换到深色'} title={theme === 'dark' ? '切换到浅色' : '切换到深色'}>{theme === 'dark' ? '☀' : '☾'}</button>
           </div>
