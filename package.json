@@ -1,0 +1,51 @@
+{
+  "name": "ielts-review-lab",
+  "private": true,
+  "version": "0.3.0",
+  "description": "雅思做题之后的私教：确定性判题、只依据原文的讲解、错因归类与刻意练习。网页版 + 本地 MCP 引擎。",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "ielts-mcp": "mcp/server.js" },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run ielts:check-harness",
+    "mcp": "node mcp/server.js",
+    "ielts:export-harness": "node scripts/ielts-export-harness.mjs",
+    "ielts:check-harness": "node scripts/ielts-check-harness.mjs",
+    "ielts:check-template-versions": "node scripts/ielts-check-template-versions.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
+    "@tailwindcss/vite": "^4.3.2",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^6.0.3",
+    "eslint": "^10.7.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.4",
+    "vitest": "^4.1.10"
+  },
+  "engines": { "node": ">=20" },
+  "overrides": {
+    "@emnapi/core": "1.11.1",
+    "@emnapi/runtime": "1.11.1"
+  }
+}

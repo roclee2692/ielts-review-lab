@@ -1,0 +1,381 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ─────────────────────────────────────────────────────────────
+   Tailwind v4 @theme：把现有 CSS 变量暴露给 utility classes
+   命名规则：suffix 与 utility 直接对应（bg-surface / text-fg / rounded-glass）
+   不替换底层 CSS 变量，仅做 alias，新旧并存
+   ───────────────────────────────────────────────────────────── */
+@theme {
+  /* Surfaces */
+  --color-bg: var(--bg);
+  --color-elev: var(--bg-elev);
+  --color-bg-elev: var(--bg-elev);
+  --color-surface: var(--surface);
+  --color-surface-mid: var(--surface-2);
+  --color-surface-strong: var(--surface-3);
+
+  /* Borders */
+  --color-border-soft: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-glass-border: var(--glass-border);
+
+  /* Text */
+  --color-fg: var(--text-primary);
+  --color-fg-muted: var(--text-secondary);
+  --color-fg-faint: var(--text-tertiary);
+
+  /* Accent */
+  --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-border: var(--accent-border);
+
+  /* Semantic */
+  --color-success: var(--green);
+  --color-warning: var(--yellow);
+  --color-danger:  var(--red);
+  --color-info:    var(--blue);
+
+  /* Radii */
+  --radius-glass-sm: var(--r-sm);
+  --radius-glass-md: var(--r-md);
+  --radius-glass-lg: var(--r-lg);
+  --radius-glass-xl: var(--r-xl);
+
+  /* Shadows */
+  --shadow-glass: var(--glass-shadow);
+  --shadow-glass-lg: var(--glass-shadow-lg);
+}
+
+@layer components {
+  .glass-card {
+    @apply rounded-2xl border border-glass-border bg-surface-mid p-5 backdrop-blur-2xl
+           shadow-[0_12px_40px_rgba(0,0,0,0.10),inset_0_1px_1px_rgba(255,255,255,0.16)];
+    background-image: var(--liquid-panel);
+  }
+
+  .glass-card-sm {
+    @apply rounded-xl border border-glass-border bg-surface px-4 py-3 backdrop-blur-xl;
+    background-image: var(--liquid-panel);
+  }
+
+  .toolbar-btn {
+    @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold
+           text-fg-muted border border-transparent transition-colors
+           hover:text-fg hover:bg-surface-strong outline-none
+           focus-visible:ring-2 focus-visible:ring-accent;
+  }
+
+  .toolbar-btn-active {
+    @apply bg-accent-soft text-accent-light shadow-[inset_0_0_0_1px_var(--accent-border)];
+  }
+
+  .section-eyebrow {
+    @apply text-[11px] font-bold uppercase tracking-[0.08em] text-fg-faint;
+  }
+
+  .icon-btn {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-lg
+           text-fg-muted transition-colors hover:bg-surface hover:text-fg
+           outline-none focus-visible:ring-2 focus-visible:ring-accent;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-bold
+           bg-gradient-to-br from-[#a855f7] to-[#ec4899] text-white
+           shadow-[0_6px_18px_rgba(168,85,247,0.35)] border border-white/15
+           transition-transform hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold
+           border border-glass-border text-fg-muted hover:text-fg hover:bg-surface;
+  }
+
+}
+
+
+/* ── Dark theme (default) ── */
+:root, [data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Base */
+  --bg: #06060e;
+  --bg-elev: #0a0a16;
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--bg-elev);
+
+  /* Glass surfaces — translucent, layered */
+  --surface:   rgba(255, 255, 255, 0.055);
+  --surface-2: rgba(255, 255, 255, 0.09);
+  --surface-3: rgba(255, 255, 255, 0.13);
+  --surface-low: var(--surface);
+  --surface-high: var(--surface-3);
+
+  /* Luminous borders */
+  --border:        rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  /* Text */
+  --text-primary:   #eeeeff;
+  --text-secondary: #a0a4bc;
+  --text-tertiary:  #55596e;
+  --text-dim: var(--text-tertiary);
+
+  /* Brand — vivid violet */
+  --accent:        #9b6dff;
+  --accent-light:  #c4a3ff;
+  --accent-dim:    #7040e0;
+  --accent-soft:   rgba(155, 109, 255, 0.13);
+  --accent-border: rgba(155, 109, 255, 0.4);
+
+  /* Semantic */
+  --green:       #34d399;
+  --green-soft:  rgba(52,  211, 153, 0.12);
+  --blue:        #60a5fa;
+  --blue-soft:   rgba(96,  165, 250, 0.12);
+  --yellow:      #fbbf24;
+  --yellow-soft: rgba(251, 191,  36, 0.12);
+  --red:         #f87171;
+  --red-soft:    rgba(248, 113, 113, 0.12);
+  --pink:        #f472b6;
+
+  /* Code */
+  --code-bg:     rgba(0, 0, 0, 0.4);
+  --code-border: rgba(255, 255, 255, 0.07);
+
+  /* Syntax */
+  --syntax-comment:  #555a72;
+  --syntax-string:   #86efac;
+  --syntax-keyword:  #c084fc;
+  --syntax-number:   #fbbf24;
+  --syntax-function: #93c5fd;
+  --syntax-operator: #f9a8d4;
+
+  /* Visualizer */
+  --bar-default:   rgba(255, 255, 255, 0.18);
+  --bar-inactive:  rgba(255, 255, 255, 0.08);
+  --edge-inactive: rgba(255, 255, 255, 0.1);
+
+  /* Header */
+  --header-bg: rgba(6, 6, 14, 0.65);
+  /* Liquid-glass Dynamic Island TopBar · 极淡背景 + 重度 backdrop-blur，
+     让它无论叠在哪个页面（首页渐变 / 算法库 / 理财 / 逻辑学）都靠模糊穿透融合 */
+  --island-bg: rgba(20, 20, 32, 0.16);
+  --island-border: rgba(255, 255, 255, 0.14);
+  --island-highlight-top: rgba(255, 255, 255, 0.18);
+  --island-highlight-bottom: rgba(255, 255, 255, 0.06);
+  --island-shadow-outer: 0 12px 30px rgba(0, 0, 0, 0.34), 0 2px 8px rgba(0, 0, 0, 0.18);
+
+  /* ── Glass tokens ── */
+  --glass-bg:            rgba(255, 255, 255, 0.055);
+  --glass-bg-mid:        rgba(255, 255, 255, 0.085);
+  --glass-bg-strong:     rgba(255, 255, 255, 0.12);
+  --glass-border:        rgba(255, 255, 255, 0.11);
+  --glass-border-strong: rgba(255, 255, 255, 0.22);
+  --glass-shine:         inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  --glass-shadow:        0 4px 32px rgba(0, 0, 0, 0.55),
+                         0 1px 0 rgba(255, 255, 255, 0.07) inset;
+  --glass-shadow-lg:     0 8px 56px rgba(0, 0, 0, 0.75),
+                         0 1px 0 rgba(255, 255, 255, 0.1) inset;
+
+  /* Shadows */
+  --shadow-sm:   0 1px 4px rgba(0,  0,  0,  0.45);
+  --shadow-md:   0 4px 24px rgba(0,  0,  0,  0.55);
+  --shadow-lg:   0 16px 64px rgba(0,  0,  0,  0.80);
+  --shadow-glow: 0 0 48px rgba(155, 109, 255, 0.22);
+
+  /* Radii */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+
+  /* ── Typography scale ── */
+  --fs-xs:  11px;    /* 标签、注解、表头 */
+  --fs-sm:  12.5px;  /* 正文小、密集表格 */
+  --fs-md:  14px;    /* 正文标准 */
+  --fs-lg:  16px;    /* 段落强调、副标题 */
+  --fs-xl:  20px;    /* 章节小标题 */
+  --fs-2xl: 28px;    /* 页内大标题 */
+  --fs-3xl: 36px;    /* Hero 标题 */
+
+  --lh-tight:  1.3;
+  --lh-normal: 1.6;
+  --lh-loose:  1.8;
+
+  /* ── Spacing scale ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+}
+
+/* ── Light theme ── */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:     #ededf8;
+  --bg-elev:#f4f4fc;
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--bg-elev);
+
+  --surface:   rgba(255, 255, 255, 0.48);
+  --surface-2: rgba(255, 255, 255, 0.64);
+  --surface-3: rgba(255, 255, 255, 0.80);
+  --surface-low: var(--surface);
+  --surface-high: var(--surface-3);
+
+  --border:        rgba(160, 155, 210, 0.28);
+  --border-strong: rgba(140, 130, 200, 0.42);
+
+  --text-primary:   #0c0c1e;
+  --text-secondary: #46466a;
+  --text-tertiary:  #9898b8;
+  --text-dim: var(--text-tertiary);
+
+  --accent:        #7c3aed;
+  --accent-light:  #6d28d9;
+  --accent-dim:    #5b21b6;
+  --accent-soft:   rgba(124, 58, 237, 0.09);
+  --accent-border: rgba(124, 58, 237, 0.3);
+
+  --green:       #059669;
+  --green-soft:  rgba(5,   150, 105, 0.10);
+  --blue:        #2563eb;
+  --blue-soft:   rgba(37,  99,  235, 0.10);
+  --yellow:      #d97706;
+  --yellow-soft: rgba(217, 119,   6, 0.12);
+  --red:         #dc2626;
+  --red-soft:    rgba(220, 38,   38, 0.10);
+  --pink:        #db2777;
+
+  --code-bg:     rgba(255, 255, 255, 0.72);
+  --code-border: rgba(160, 155, 210, 0.22);
+
+  --syntax-comment:  #9898b4;
+  --syntax-string:   #16a34a;
+  --syntax-keyword:  #7c3aed;
+  --syntax-number:   #d97706;
+  --syntax-function: #2563eb;
+  --syntax-operator: #db2777;
+
+  --bar-default:   #c8c8e8;
+  --bar-inactive:  #d8d8ee;
+  --edge-inactive: rgba(160, 155, 210, 0.35);
+
+  --header-bg: rgba(237, 237, 248, 0.72);
+  /* Liquid-glass Dynamic Island TopBar (light) · 几乎纯靠 backdrop-blur
+     穿透，底色只做一点提亮，让它在白底 / 渐变底 / 学科页 hero 上都融合 */
+  --island-bg: rgba(255, 255, 255, 0.20);
+  --island-border: rgba(255, 255, 255, 0.30);
+  --island-highlight-top: rgba(255, 255, 255, 0.42);
+  --island-highlight-bottom: rgba(255, 255, 255, 0.06);
+  --island-shadow-outer: 0 8px 20px rgba(60, 50, 120, 0.08), 0 2px 6px rgba(60, 50, 120, 0.04);
+
+  --glass-bg:            rgba(255, 255, 255, 0.40);
+  --glass-bg-mid:        rgba(255, 255, 255, 0.54);
+  --glass-bg-strong:     rgba(255, 255, 255, 0.72);
+  --glass-border:        rgba(255, 255, 255, 0.52);
+  --glass-border-strong: rgba(255, 255, 255, 0.72);
+  --glass-shine:         inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --glass-shadow:        0 4px 20px rgba(80, 60, 180, 0.07),
+                         0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  --glass-shadow-lg:     0 8px 40px rgba(80, 60, 180, 0.12),
+                         0 1px 0 rgba(255, 255, 255, 1) inset;
+
+  --shadow-sm:   0 1px 3px rgba(60, 50, 140, 0.06);
+  --shadow-md:   0 4px 16px rgba(60, 50, 140, 0.09);
+  --shadow-lg:   0 12px 48px rgba(60, 50, 140, 0.15);
+  --shadow-glow: 0 0 36px rgba(124, 58, 237, 0.16);
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+}
+
+/* ── Type tokens (theme-agnostic) ── */
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+  --glass-blur: blur(28px) saturate(200%);
+}
+
+/* ═══════════════════════════════════════════════
+   GLASS UTILITY CLASSES
+   ═══════════════════════════════════════════════ */
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(40px) saturate(220%);
+  -webkit-backdrop-filter: blur(40px) saturate(220%);
+  border: 1px solid var(--glass-border-strong);
+  box-shadow: var(--glass-shadow-lg);
+}
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-shine);
+  border-radius: var(--r-lg);
+}
+
+/* ═══════════════════════════════════════════════
+   BASE RESET
+   ═══════════════════════════════════════════════ */
+
+* { box-sizing: border-box; }
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  background: var(--bg);
+}
+
+/* scrollbar-gutter 不放在 html/body 级别：
+   html 级别的 stable gutter 会让 100vw > 可视宽，
+   导致 width:100vw 的全屏页面（逻辑学/理财/健康）右侧漏出一条缝。
+   稳定滚动槽由 AppLayout <main> 在需要时按需加载。 */
+html {
+  overflow-x: hidden; /* 兜底：防止任何横向溢出在文档级出现滚动条 */
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.01em;
+  transition: background-color 0.4s ease, color 0.3s ease;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+textarea, input, select, button { font: inherit; }
+::selection { background: var(--accent-soft); }

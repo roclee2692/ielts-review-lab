@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "exactOptionalPropertyTypes": false
+  },
+  "exclude": [
+    "src/features/ielts/core/__tests__"
+  ],
+  "include": [
+    "src/features/ielts/core/**/*.js",
+    "src/services/storage/JsonStore.js"
+  ]
+}

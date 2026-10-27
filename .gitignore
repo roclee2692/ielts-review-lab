@@ -1,0 +1,41 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Local review/extraction artifacts
+.git_disabled/
+_artifact_reviews/
+回收站bin/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Playwright E2E 产物
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/
+
+# local tooling
+.claude/
+
+# local handoff notes (contain machine paths)
+CONTEXT.md

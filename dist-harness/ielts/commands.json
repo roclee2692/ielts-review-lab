@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "source": {
+    "templates": "src/features/ielts/ai/templates.js",
+    "writingPath": "src/features/ielts/core/writingPath.js"
+  },
+  "commands": [
+    {
+      "name": "/ielts",
+      "description": "显示可用模式与下一步",
+      "mode": "help",
+      "templateId": null
+    },
+    {
+      "name": "/ielts-reading",
+      "description": "进入阅读复盘：原文、题目、答案册、用户答案",
+      "mode": "reading",
+      "templateId": "ielts.reading.explain"
+    },
+    {
+      "name": "/ielts-listening",
+      "description": "进入听力复盘：文稿、题目、答案册、用户答案、反思",
+      "mode": "listening",
+      "templateId": "ielts.listening.explain"
+    },
+    {
+      "name": "/ielts-sets",
+      "description": "查看按来源标签归并的整套用时、正确率、估算趋势与报告",
+      "mode": "sets",
+      "templateId": null
+    },
+    {
+      "name": "/ielts-review",
+      "description": "打开今日错因复练、替换库与收藏词块的间隔复习队列",
+      "mode": "review",
+      "templateId": null
+    },
+    {
+      "name": "/ielts-writing",
+      "description": "进入分步写作训练，检查锁定路径",
+      "mode": "writing",
+      "templateId": "ielts.writing.feedback"
+    },
+    {
+      "name": "/ielts-speaking",
+      "description": "进入口语训练，按 Part 1/2/3 回答",
+      "mode": "speaking",
+      "templateId": "ielts.speaking.feedback"
+    },
+    {
+      "name": "/ielts-vocab",
+      "description": "打开四类词块与我的替换库",
+      "mode": "vocab",
+      "templateId": null
+    },
+    {
+      "name": "/ielts-reset",
+      "description": "清除当前会话上下文（不删除浏览器本地数据）",
+      "mode": "reset",
+      "templateId": null
+    }
+  ],
+  "writingPath": [
+    {
+      "id": "t1-intro",
+      "title": "Task 1 开头改写",
+      "requires": []
+    },
+    {
+      "id": "t1-overview",
+      "title": "Task 1 Overview",
+      "requires": [
+        "t1-intro"
+      ]
+    },
+    {
+      "id": "t1-body",
+      "title": "Task 1 主体段数据描述",
+      "requires": [
+        "t1-overview"
+      ]
+    },
+    {
+      "id": "mock-t1",
+      "title": "20 分钟小作文限时",
+      "requires": [
+        "t1-body"
+      ]
+    },
+    {
+      "id": "t2-intro",
+      "title": "Task 2 开头改写",
+      "requires": []
+    },
+    {
+      "id": "t2-conclusion",
+      "title": "Task 2 结尾总结",
+      "requires": []
+    },
+    {
+      "id": "t2-outline",
+      "title": "Task 2 构思框架",
+      "requires": [
+        "t2-intro",
+        "t2-conclusion"
+      ]
+    },
+    {
+      "id": "t2-body",
+      "title": "Task 2 主体段展开",
+      "requires": [
+        "t2-outline"
+      ]
+    },
+    {
+      "id": "mock-t2",
+      "title": "40 分钟大作文限时",
+      "requires": [
+        "t2-body"
+      ]
+    },
+    {
+      "id": "mock-full",
+      "title": "60 分钟全套",
+      "requires": [
+        "mock-t1",
+        "mock-t2"
+      ]
+    },
+    {
+      "id": "translation",
+      "title": "中译英句型",
+      "requires": []
+    }
+  ]
+}

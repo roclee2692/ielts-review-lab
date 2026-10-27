@@ -1,0 +1,112 @@
+# IELTS Review Lab · 雅思复盘与刻意练习
+
+**做完题之后的私教。** 把“看答案”变成“知道为什么错、下次怎么不错”。
+
+这里不出新题，也不内置任何真题。你在纸质剑桥书、刷题网站或 App 上做完一篇阅读或一个 Part 听力，把原文（或文稿）、题目、答案册和自己的答案交进来：
+
+1. **确定性判题**：字数要求、单复数、拼写、判断题标签体系，全部由规则判定，可测试、有出处。
+2. **只依据原文的讲解**：定位句、同义替换对照、为什么答案册对、你为什么错。模型给的引用必须逐字出现在你的原文里，否则标“讲解不可靠”。
+3. **归因**：固定错因表，规则能定的规则定，其余你点、模型补。
+4. **刻意练习**：错题按 1/3/7/14/30 天回来；看“同类错误复发率”是否在下降。
+
+写作和口语是分步训练系统：小步骤反复练，反馈少而准，不代写。
+
+> 所有内置示例均为原创，非真题。只使用你有权使用的材料；你的数据只存在你自己的电脑上。
+
+## 两种用法，同一个引擎
+
+| | 网页版 | 本地 MCP 引擎 |
+|---|---|---|
+| 模型从哪来 | 你自己的 API key（DeepSeek 默认，兼容 OpenAI 格式的都行）；没 key 也能判题、记错题，讲解用醒目标注的模拟反馈 | 你已经订阅的 AI（Claude 桌面版、Claude Code、Codex 等），不额外花钱 |
+| 录入 | 粘贴 + 自动拆题；题集库 + 一行答案速记 | 直接把书页照片、App 截图拖进对话，宿主模型识别后交给引擎校验 |
+| 数据 | 浏览器本地，可导出 / 恢复 | 本机文件夹（默认 `~/.ielts-review-lab`），纯 JSON，可放进 git |
+
+两条路的判题、计词、换算、引用校验、错因表、复习排期是同一份代码（`src/features/ielts/core/`），任何外壳都绕不过去。
+
+## 网页版
+
+```bash
+npm install
+```
+
+```bash
+npm run dev
+```
+
+打开 <http://localhost:5173/ielts>。
+
+- **配置模型**：设置页填服务商、API key、模型名。key 只存在你的浏览器里，不进仓库、不进构建产物；每次发送前会弹窗显示将发送的全部内容。服务商不允许浏览器直连时，可以部署到 Vercel，用 `/api/ielts/llm` 同源中转（只转发、不记录，只接受注册过的模板）。
+- **录入提速**：
+  - 判题时勾选“存进题集库”，同一篇以后重做直接从题集库载入，只敲答案。
+  - 答案速记：`1 TRUE 2 NG 3 car park 4 B`，T/F/NG/Y/N 按题型展开。
+- **导入笔记 / 话题清单**：写作知识卡片支持导入 Markdown 或 JSON 笔记；口语支持导入本季话题清单（纯文本或 JSON）。
+- **备份**：设置页“导出全部学习数据”（不含 key），换电脑或清缓存后用“从导出文件恢复”。
+
+## 本地 MCP 引擎（订阅路线）
+
+不需要安装任何依赖，Node 20+ 即可：
+
+```bash
+node mcp/server.js
+```
+
+**Claude 桌面版**：在 `claude_desktop_config.json` 的 `mcpServers` 里加一项（路径换成你的克隆位置）：
+
+```json
+{
+  "mcpServers": {
+    "ielts-review-lab": {
+      "command": "node",
+      "args": ["/absolute/path/to/ielts-review-lab/mcp/server.js"],
+      "env": { "IELTS_LAB_DATA": "/absolute/path/to/your/ielts-data" }
+    }
+  }
+}
+```
+
+**Claude Code**：
+
+```bash
+claude mcp add ielts-review-lab -- node /absolute/path/to/ielts-review-lab/mcp/server.js
+```
+
+再把 [`skills/ielts-review/SKILL.md`](skills/ielts-review/SKILL.md) 放进宿主的技能目录（Claude Code 是 `~/.claude/skills/ielts-review/`），模型就知道怎么带你复盘。
+
+工具：
+
+| 工具 | 作用 |
+|---|---|
+| `list_sets` | 已录过的题集，重做时复用 |
+| `ingest_passage` | 录入原文、题目、答案册、你的答案（或一行速记）、听力反思；检查题号连续、标签合法、答案对得上，不合格退回 |
+| `judge_set` | 唯一判对错的地方 |
+| `submit_explanation` | 提交讲解；引用不在原文里、错因不在表里都会被退回 |
+| `set_cause` | 你确认或改错因；之后模型讲解不会覆盖 |
+| `weakness` | 错因分布 + 复发率 |
+| `today` / `mark_reviewed` | 今天到期的错题（先不给答案）和重做结果 |
+
+## 开发
+
+```bash
+npm run check
+```
+
+依次跑 lint、内核类型检查、单测（含 MCP 流程测试）、构建、插件导出一致性检查。端到端测试（无 key 跑通阅读、听力、写作路径）：
+
+```bash
+npm run test:e2e
+```
+
+文档：
+
+- [docs/ielts/ARCHITECTURE.md](docs/ielts/ARCHITECTURE.md)：分层、依赖方向、关键取舍、v0.3 合并说明
+- [docs/ielts/RULES.md](docs/ielts/RULES.md)：每条雅思规则的公开来源、访问日期，以及标为“非官方假设”的部分
+- [docs/ielts/PROMPTS.md](docs/ielts/PROMPTS.md)：每个模型模板的用途、版本、变量、输出结构和约束
+- [docs/ROADMAP.md](docs/ROADMAP.md)：做了什么、接下来做什么、明确不做什么
+
+## 版权边界
+
+仓库和任何服务端都不内置雅思官方或剑桥的真题、音频、文稿。你粘贴或拍照的材料只保存在你自己的设备上，原文默认不长期保存（错题库只留定位片段），可以一键删除。不做任何分享原文的功能。
+
+## 许可
+
+MIT。网页版的雅思模块最初写在 cshub 学习站里，这里拆出来独立维护。
